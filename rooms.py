@@ -94,7 +94,7 @@ def create_room():
     with open(os.path.join(room_path, 'users.csv'), 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['login', 'joined_at', 'role'])
-        writer.writerow([login, now, 'founder'])
+        writer.writerow([login, now, 'godfather'])
 
     return redirect(url_for('rooms.room', room_id=room_id))
 
@@ -109,6 +109,28 @@ def _track_room(room_id):
     if session.get('user_type') == 'registered':
         from auth import save_user_rooms
         save_user_rooms(session['login'], visited)
+
+
+def _untrack_room(room_id):
+    visited = session.get('visited_rooms', [])
+    if room_id in visited:
+        visited.remove(room_id)
+    session['visited_rooms'] = visited
+
+    if session.get('user_type') == 'registered':
+        from auth import save_user_rooms
+        save_user_rooms(session['login'], visited)
+
+
+def _remove_user_from_room(room_id, login):
+    users = _read_users(room_id)
+    users = [u for u in users if u['login'] != login]
+    users_path = os.path.join(ROOMS_DIR, room_id, 'users.csv')
+    with open(users_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['login', 'joined_at', 'role'])
+        for u in users:
+            writer.writerow([u['login'], u['joined_at'], u['role']])
 
 
 @rooms_bp.route('/room/<room_id>')
@@ -152,6 +174,28 @@ def post_message(room_id):
         writer.writerow([author, now, text])
 
     return redirect(url_for('rooms.room', room_id=room_id))
+
+
+@rooms_bp.route('/room/<room_id>/leave', methods=['POST'])
+def leave_room(room_id):
+    if session.get('user_type') != 'registered':
+        return redirect(url_for('index'))
+
+    room_path = os.path.join(ROOMS_DIR, room_id)
+    if not os.path.isdir(room_path):
+        return redirect(url_for('index'))
+
+    login = session['login']
+    config = _read_config(room_id)
+
+    # godfather не может покинуть свою комнату
+    if config['creator_login'] == login:
+        return redirect(url_for('rooms.room', room_id=room_id))
+
+    _remove_user_from_room(room_id, login)
+    _untrack_room(room_id)
+
+    return redirect(url_for('index'))
 
 
 @rooms_bp.route('/room/<room_id>/manage', methods=['GET', 'POST'])
