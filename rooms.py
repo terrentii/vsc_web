@@ -63,11 +63,11 @@ def _can_access_room(room_id):
 @rooms_bp.route('/room/join', methods=['POST'])
 def join_room():
     room_id = request.form.get('room_id', '').strip()
-    if len(room_id) != 10 or not room_id.isdigit():
-        return redirect(url_for('index'))
+    if not room_id.isdigit() or len(room_id) != 10:
+        return render_template('index.html', error='Неверный формат ID: должно быть ровно 10 цифр.')
     room_path = os.path.join(ROOMS_DIR, room_id)
     if not os.path.isdir(room_path):
-        return redirect(url_for('index'))
+        return render_template('index.html', error='Комната с таким ID не найдена.')
     return redirect(url_for('rooms.room', room_id=room_id))
 
 
