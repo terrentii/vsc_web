@@ -23,7 +23,7 @@
                 {% for msg in messages %}
                 <div class="msg">
                     <span class="msg-author">{{ msg.author }}</span>
-                    <span class="msg-time">{{ msg.timestamp }}</span>
+                    <span class="msg-time">{{ msg.timestamp | ts }}</span>
                     <div class="msg-text">{{ msg.text }}</div>
                 </div>
                 {% endfor %}

@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime, timezone, date
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_session import Session
 from auth import auth_bp
@@ -15,6 +16,27 @@ Session(app)
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
+
+
+MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
+          'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+
+
+@app.template_filter('ts')
+def format_ts(value):
+    """Форматирует ISO-timestamp в читабельный вид: сегодня/вчера/дата + время."""
+    try:
+        dt = datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        return value
+    today = date.today()
+    d = dt.date()
+    time_str = dt.strftime('%H:%M')
+    if d == today:
+        return f'сегодня {time_str}'
+    if (today - d).days == 1:
+        return f'вчера {time_str}'
+    return f'{d.day} {MONTHS[d.month - 1]} {time_str}'
 
 
 @app.context_processor
