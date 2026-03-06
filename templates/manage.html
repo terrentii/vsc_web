@@ -7,6 +7,10 @@
 
     <form method="post" style="margin-bottom: 20px;">
         <div class="form-group">
+            <label>Название комнаты</label>
+            <input type="text" name="room_name" value="{{ config.room_name }}" placeholder="Оставьте пустым, чтобы показывать ID" maxlength="64">
+        </div>
+        <div class="form-group">
             <label>Тип комнаты</label>
             <select name="is_open">
                 <option value="true" {% if config.is_open == 'true' %}selected{% endif %}>Открытая</option>
