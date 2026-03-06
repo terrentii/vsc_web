@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AnonMsg{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            background: #ececec;
+            color: #222;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Menu bar — mimics QMenuBar */
+        .menubar {
+            background: #f0f0f0;
+            border-bottom: 1px solid #c0c0c0;
+            padding: 0 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 28px;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+        .menubar-left { display: flex; gap: 2px; align-items: center; }
+        .menubar-right { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #555; }
+        .menubar a, .menubar span.menu-item {
+            color: #222;
+            text-decoration: none;
+            padding: 3px 8px;
+            border-radius: 3px;
+        }
+        .menubar a:hover, .menubar span.menu-item:hover {
+            background: #dce4f0;
+        }
+        .menubar .user-badge { color: #444; font-weight: 500; }
+        .menubar button.menu-btn {
+            background: none;
+            border: none;
+            color: #222;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-family: inherit;
+        }
+        .menubar button.menu-btn:hover { background: #dce4f0; }
+
+        /* Status bar */
+        .statusbar {
+            background: #f0f0f0;
+            border-top: 1px solid #c0c0c0;
+            height: 22px;
+            padding: 0 10px;
+            font-size: 11px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        /* Main content area */
+        .app-body {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Centered layout for forms (login/register/index) */
+        .centered-container {
+            max-width: 420px;
+            margin: 60px auto;
+            padding: 24px;
+            background: #fff;
+            border: 1px solid #c0c0c0;
+            border-radius: 4px;
+        }
+        .centered-container h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #222;
+        }
+
+        /* Form styles */
+        .form-group { margin-bottom: 12px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 13px;
+            color: #444;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ababab;
+            border-radius: 3px;
+            font-size: 13px;
+            font-family: inherit;
+            color: #222;
+            background: #fff;
+        }
+        input[type="text"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #3daee9;
+        }
+        select {
+            padding: 6px 8px;
+            border: 1px solid #ababab;
+            border-radius: 3px;
+            font-size: 13px;
+            font-family: inherit;
+            color: #222;
+            background: #fff;
+        }
+        select:focus { outline: none; border-color: #3daee9; }
+
+        /* Buttons — QPushButton style */
+        .btn {
+            display: inline-block;
+            padding: 5px 16px;
+            background: #e1e1e1;
+            color: #222;
+            border: 1px solid #ababab;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+            text-decoration: none;
+        }
+        .btn:hover { background: #d0d0d0; border-color: #999; }
+        .btn:active { background: #c4c4c4; }
+        .btn-primary {
+            background: #3daee9;
+            color: #fff;
+            border-color: #2d9cd8;
+        }
+        .btn-primary:hover { background: #2d9cd8; }
+        .btn-primary:active { background: #2490c8; }
+
+        a { color: #2980b9; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .error { color: #da4453; margin-bottom: 10px; font-size: 13px; }
+
+        /* Two-panel messenger layout */
+        .messenger {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 280px;
+            min-width: 220px;
+            background: #fff;
+            border-right: 2px solid #c0c0c0;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            padding: 10px 12px;
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .sidebar-search {
+            padding: 8px 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .sidebar-search input {
+            width: 100%;
+            padding: 5px 8px;
+            border: 1px solid #ababab;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+        .sidebar-search input:focus { outline: none; border-color: #3daee9; }
+        .sidebar-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+        .sidebar-list .room-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            border-bottom: 1px solid #eee;
+            color: #333;
+            text-decoration: none;
+            display: block;
+        }
+        .sidebar-list .room-item:hover { background: #e8f0fe; text-decoration: none; }
+        .sidebar-list .room-item.active { background: #3daee9; color: #fff; }
+        .sidebar-footer {
+            padding: 8px 10px;
+            border-top: 1px solid #ddd;
+        }
+        .sidebar-footer .btn { width: 100%; text-align: center; }
+
+        .chat-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+        }
+        .chat-header {
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+            background: #f5f5f5;
+            color: #333;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+            background: #fafafa;
+        }
+        .msg {
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .msg:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .msg-author { font-weight: 600; color: #2980b9; font-size: 13px; }
+        .msg-time { font-size: 11px; color: #999; margin-left: 8px; }
+        .msg-text { margin-top: 3px; font-size: 13px; word-wrap: break-word; color: #222; }
+        .chat-input {
+            padding: 8px 12px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 8px;
+            background: #f5f5f5;
+        }
+        .chat-input input[type="text"] {
+            flex: 1;
+        }
+        .chat-input .btn {
+            min-width: 80px;
+            height: 32px;
+        }
+        .chat-empty {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-size: 14px;
+            background: #fafafa;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="menubar">
+        <div class="menubar-left">
+            <a href="{{ url_for('index') }}">AnonMsg</a>
+        </div>
+        <div class="menubar-right">
+            {% if session.get('user_type') == 'registered' %}
+                <span class="user-badge">{{ session.get('login') }}</span>
+                <form action="{{ url_for('auth.logout') }}" method="post" style="display:inline; margin:0;">
+                    <button class="menu-btn" type="submit">Выход</button>
+                </form>
+            {% else %}
+                <a href="{{ url_for('auth.login') }}">Вход</a>
+                <a href="{{ url_for('auth.register') }}">Регистрация</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="app-body">
+        {% block content %}{% endblock %}
+    </div>
+
+    <div class="statusbar">
+        {% block statusbar %}{% endblock %}
+    </div>
+</body>
+</html>

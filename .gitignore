@@ -7,6 +7,12 @@ __pycache__/
 *.so
 
 CLAUDE.md
+rooms/
+users/
+flask_session/
+
+rooms.txt
+inspiration.txt
 
 # Distribution / packaging
 .Python

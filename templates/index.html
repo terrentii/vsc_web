@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}AnonMsg — Messenger{% endblock %}
+
+{% block content %}
+<div class="messenger">
+    {% include '_sidebar.html' %}
+
+    <div class="chat-panel">
+        {% if error %}
+        <div style="padding: 12px 16px;">
+            <p class="error">{{ error }}</p>
+        </div>
+        {% endif %}
+        <div class="chat-empty">
+            Введите ID комнаты для начала общения
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block statusbar %}Готово{% endblock %}
