@@ -27,9 +27,25 @@
         <div class="chat-messages" id="messages">
             {% if messages %}
                 {% for msg in messages %}
-                <div class="msg">
-                    <span class="msg-author">{{ msg.author }}</span>
-                    <span class="msg-time">{{ msg.timestamp | ts }}</span>
+                <div class="msg" id="msg-{{ loop.index }}">
+                    <div class="msg-header">
+                        <span>
+                            <span class="msg-author">{{ msg.author }}</span>
+                            <span class="msg-time">{{ msg.timestamp | ts }}</span>
+                        </span>
+                        <button type="button" class="reply-btn"
+                            data-index="{{ loop.index }}"
+                            data-author="{{ msg.author }}">Ответить</button>
+                    </div>
+                    {% set rt = msg.get('reply_to', '') | trim %}
+                    {% if rt and rt.isdigit() %}
+                        {% set ri = rt | int %}
+                        {% if ri > 0 and ri <= messages | length %}
+                        <a href="#msg-{{ ri }}" class="msg-reply-link">
+                            ответ на {{ messages[ri - 1].author }}: {{ messages[ri - 1].text | truncate(60) }}
+                        </a>
+                        {% endif %}
+                    {% endif %}
                     <div class="msg-text">{{ msg.text }}</div>
                 </div>
                 {% endfor %}
@@ -38,9 +54,16 @@
             {% endif %}
         </div>
 
-        <form class="chat-input" action="{{ url_for('rooms.post_message', room_id=room_id) }}" method="post">
-            <input type="text" name="text" placeholder="Введите сообщение..." autocomplete="off" required>
-            <button class="btn btn-primary" type="submit">Отправить</button>
+        <form id="msg-form" action="{{ url_for('rooms.post_message', room_id=room_id) }}" method="post">
+            <input type="hidden" name="reply_to" id="reply_to" value="">
+            <div class="reply-preview" id="reply-preview">
+                <span id="reply-preview-text"></span>
+                <button type="button" class="reply-cancel" id="reply-cancel">&times;</button>
+            </div>
+            <div class="chat-input">
+                <input type="text" name="text" placeholder="Введите сообщение..." autocomplete="off" required>
+                <button class="btn btn-primary" type="submit">Отправить</button>
+            </div>
         </form>
     </div>
 </div>
@@ -48,6 +71,23 @@
 <script>
     const el = document.getElementById('messages');
     el.scrollTop = el.scrollHeight;
+
+    // ответы
+    document.querySelectorAll('.reply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = btn.dataset.index;
+            const author = btn.dataset.author;
+            document.getElementById('reply_to').value = idx;
+            document.getElementById('reply-preview-text').textContent = 'Ответ на ' + author;
+            document.getElementById('reply-preview').style.display = 'flex';
+            document.querySelector('.chat-input input[name="text"]').focus();
+        });
+    });
+
+    document.getElementById('reply-cancel').addEventListener('click', () => {
+        document.getElementById('reply_to').value = '';
+        document.getElementById('reply-preview').style.display = 'none';
+    });
 </script>
 {% endblock %}
 

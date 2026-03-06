@@ -7,6 +7,7 @@ __pycache__/
 *.so
 
 CLAUDE.md
+.claude/
 rooms/
 users/
 flask_session/
