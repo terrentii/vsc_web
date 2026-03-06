@@ -68,9 +68,36 @@
     </div>
 </div>
 
+{% if session.get('user_type') == 'anon' %}
+<div class="disclaimer-overlay" id="disclaimer-overlay">
+    <div class="disclaimer-box">
+        <div class="disclaimer-title">⚠ Внимание</div>
+        <div class="disclaimer-body">
+            <p>Вы входите в чат как <strong>анонимный пользователь</strong>.</p>
+            <p>Несмотря на отсутствие регистрации, ваши сообщения могут содержать косвенные признаки, по которым вас можно <strong>деанонимизировать</strong>: стиль письма, упоминание личных деталей, IP-адрес и другие технические метаданные.</p>
+            <p>Будьте осторожны в своих высказываниях.</p>
+        </div>
+        <button class="btn btn-primary disclaimer-ok" onclick="closeDisclaimer()">Понятно</button>
+    </div>
+</div>
+{% endif %}
+
 <script>
     const el = document.getElementById('messages');
     el.scrollTop = el.scrollHeight;
+
+    // дисклеймер для анонимов — показывается один раз за сессию браузера
+    function closeDisclaimer() {
+        document.getElementById('disclaimer-overlay').style.display = 'none';
+        sessionStorage.setItem('anon_disclaimer_shown', '1');
+    }
+
+    const overlay = document.getElementById('disclaimer-overlay');
+    if (overlay) {
+        if (sessionStorage.getItem('anon_disclaimer_shown')) {
+            overlay.style.display = 'none';
+        }
+    }
 
     // ответы
     document.querySelectorAll('.reply-btn').forEach(btn => {

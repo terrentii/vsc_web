@@ -305,6 +305,39 @@
             min-width: 80px;
             height: 32px;
         }
+        /* Дисклеймер для анонимов */
+        .disclaimer-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .disclaimer-box {
+            background: #fff;
+            border: 1px solid #c0c0c0;
+            border-radius: 4px;
+            padding: 24px 28px;
+            max-width: 420px;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        .disclaimer-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #da4453;
+            margin-bottom: 14px;
+        }
+        .disclaimer-body p {
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        .disclaimer-body p:last-child { margin-bottom: 16px; }
+        .disclaimer-ok { width: 100%; text-align: center; }
         .chat-empty {
             flex: 1;
             display: flex;
