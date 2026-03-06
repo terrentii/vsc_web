@@ -90,7 +90,7 @@ def create_room():
 
     with open(os.path.join(room_path, 'messages.csv'), 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['author', 'timestamp', 'text'])
+        writer.writerow(['author', 'timestamp', 'text', 'reply_to'])
 
     with open(os.path.join(room_path, 'users.csv'), 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
@@ -163,6 +163,8 @@ def post_message(room_id):
     if not text:
         return redirect(url_for('rooms.room', room_id=room_id))
 
+    reply_to = request.form.get('reply_to', '').strip()
+
     if session.get('user_type') == 'registered':
         author = session['login']
     else:
@@ -172,7 +174,7 @@ def post_message(room_id):
     msg_path = os.path.join(room_path, 'messages.csv')
     with open(msg_path, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow([author, now, text])
+        writer.writerow([author, now, text, reply_to])
 
     return redirect(url_for('rooms.room', room_id=room_id))
 
