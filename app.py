@@ -3,7 +3,7 @@ import uuid
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_session import Session
 from auth import auth_bp
-from rooms import rooms_bp
+from rooms import rooms_bp, get_room_display_name
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', uuid.uuid4().hex)
@@ -15,6 +15,12 @@ Session(app)
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
+
+
+@app.context_processor
+def inject_room_helpers():
+    # делаем get_room_display_name доступной во всех шаблонах
+    return {'room_display_name': get_room_display_name}
 
 
 @app.before_request

@@ -10,7 +10,7 @@
         {% for rid in session.get('visited_rooms', []) %}
         <a href="{{ url_for('rooms.room', room_id=rid) }}"
            class="room-item{% if current_room == rid %} active{% endif %}">
-            {{ rid }}
+            {{ room_display_name(rid) }}
         </a>
         {% endfor %}
     </div>

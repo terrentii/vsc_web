@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}AnonMsg{% endblock %}</title>
+    <title>{% block title %}МЫС Web{% endblock %}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -264,7 +264,7 @@
 <body>
     <div class="menubar">
         <div class="menubar-left">
-            <a href="{{ url_for('index') }}">AnonMsg</a>
+            <a href="{{ url_for('index') }}">МЫС Web</a>
         </div>
         <div class="menubar-right">
             {% if session.get('user_type') == 'registered' %}

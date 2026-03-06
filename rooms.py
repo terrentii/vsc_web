@@ -40,6 +40,16 @@ def _is_user_in_room(room_id, login):
     return any(u['login'] == login for u in users)
 
 
+def get_room_display_name(room_id):
+    """Возвращает имя комнаты если задано, иначе её ID."""
+    try:
+        config = _read_config(room_id)
+        name = config.get('room_name', '').strip()
+        return name if name else room_id
+    except Exception:
+        return room_id
+
+
 def _can_access_room(room_id):
     config = _read_config(room_id)
     if config['is_open'] == 'true':
@@ -74,8 +84,8 @@ def create_room():
 
     with open(os.path.join(room_path, 'config.csv'), 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['room_id', 'is_open', 'created_at', 'creator_login'])
-        writer.writerow([room_id, 'true', now, login])
+        writer.writerow(['room_id', 'is_open', 'created_at', 'creator_login', 'room_name'])
+        writer.writerow([room_id, 'true', now, login, ''])
 
     with open(os.path.join(room_path, 'messages.csv'), 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
@@ -162,11 +172,12 @@ def manage_room(room_id):
         return render_template('manage.html', room_id=room_id, config=config, users=users)
 
     new_is_open = request.form.get('is_open', 'true')
+    new_name = request.form.get('room_name', '').strip()
     config_path = os.path.join(room_path, 'config.csv')
     with open(config_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['room_id', 'is_open', 'created_at', 'creator_login'])
-        writer.writerow([room_id, new_is_open, config['created_at'], config['creator_login']])
+        writer.writerow(['room_id', 'is_open', 'created_at', 'creator_login', 'room_name'])
+        writer.writerow([room_id, new_is_open, config['created_at'], config['creator_login'], new_name])
 
     add_user = request.form.get('add_user', '').strip()
     if add_user and not _is_user_in_room(room_id, add_user):
