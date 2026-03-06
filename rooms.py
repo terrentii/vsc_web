@@ -1,5 +1,6 @@
 import os
 import csv
+import shutil
 import random
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, session
@@ -193,6 +194,36 @@ def leave_room(room_id):
         return redirect(url_for('rooms.room', room_id=room_id))
 
     _remove_user_from_room(room_id, login)
+    _untrack_room(room_id)
+
+    return redirect(url_for('index'))
+
+
+@rooms_bp.route('/room/<room_id>/delete', methods=['POST'])
+def delete_room(room_id):
+    if session.get('user_type') != 'registered':
+        return redirect(url_for('index'))
+
+    room_path = os.path.join(ROOMS_DIR, room_id)
+    if not os.path.isdir(room_path):
+        return redirect(url_for('index'))
+
+    config = _read_config(room_id)
+    if config['creator_login'] != session.get('login'):
+        return redirect(url_for('rooms.room', room_id=room_id))
+
+    # убираем комнату из списков всех её участников
+    from auth import load_user_rooms, save_user_rooms
+    users = _read_users(room_id)
+    for u in users:
+        user_rooms = load_user_rooms(u['login'])
+        if room_id in user_rooms:
+            user_rooms.remove(room_id)
+            save_user_rooms(u['login'], user_rooms)
+
+    # удаляем папку комнаты целиком
+    shutil.rmtree(room_path)
+
     _untrack_room(room_id)
 
     return redirect(url_for('index'))
