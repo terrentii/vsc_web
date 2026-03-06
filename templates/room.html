@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Комната {{ room_id }} — AnonMsg{% endblock %}
+
+{% block content %}
+<div class="messenger">
+    {% set current_room = room_id %}
+    {% include '_sidebar.html' %}
+
+    <div class="chat-panel">
+        <div class="chat-header">
+            <span>Комната {{ room_id }}</span>
+            {% if session.get('user_type') == 'registered' and config.creator_login == session.get('login') %}
+                <a href="{{ url_for('rooms.manage_room', room_id=room_id) }}" class="btn" style="margin-left: 12px; padding: 2px 10px; font-size: 12px;">Управление</a>
+            {% endif %}
+        </div>
+
+        <div class="chat-messages" id="messages">
+            {% if messages %}
+                {% for msg in messages %}
+                <div class="msg">
+                    <span class="msg-author">{{ msg.author }}</span>
+                    <span class="msg-time">{{ msg.timestamp }}</span>
+                    <div class="msg-text">{{ msg.text }}</div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p style="color: #999; text-align: center; margin-top: 20px;">Сообщений пока нет.</p>
+            {% endif %}
+        </div>
+
+        <form class="chat-input" action="{{ url_for('rooms.post_message', room_id=room_id) }}" method="post">
+            <input type="text" name="text" placeholder="Введите сообщение..." autocomplete="off" required>
+            <button class="btn btn-primary" type="submit">Отправить</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    const el = document.getElementById('messages');
+    el.scrollTop = el.scrollHeight;
+</script>
+{% endblock %}
+
+{% block statusbar %}Комната {{ room_id }}{% endblock %}

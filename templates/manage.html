@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Управление — Комната {{ room_id }}{% endblock %}
+
+{% block content %}
+<div class="centered-container" style="max-width: 500px;">
+    <h2>Управление комнатой {{ room_id }}</h2>
+
+    <form method="post" style="margin-bottom: 20px;">
+        <div class="form-group">
+            <label>Тип комнаты</label>
+            <select name="is_open">
+                <option value="true" {% if config.is_open == 'true' %}selected{% endif %}>Открытая</option>
+                <option value="false" {% if config.is_open == 'false' %}selected{% endif %}>Закрытая</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Добавить пользователя (логин)</label>
+            <input type="text" name="add_user" placeholder="Введите логин...">
+        </div>
+        <button class="btn btn-primary" type="submit">Сохранить</button>
+    </form>
+
+    <h3 style="font-size: 14px; margin-bottom: 8px; color: #333;">Пользователи</h3>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid #ddd; color: #666;">
+            <th style="text-align: left; padding: 6px;">Логин</th>
+            <th style="text-align: left; padding: 6px;">Присоединился</th>
+            <th style="text-align: left; padding: 6px;">Роль</th>
+        </tr>
+        {% for user in users %}
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 6px;">{{ user.login }}</td>
+            <td style="padding: 6px; color: #888;">{{ user.joined_at }}</td>
+            <td style="padding: 6px;">{{ user.role }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <a href="{{ url_for('rooms.room', room_id=room_id) }}" style="display: inline-block; margin-top: 14px; font-size: 13px;">Назад в комнату</a>
+</div>
+{% endblock %}

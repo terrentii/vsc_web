@@ -1,0 +1,24 @@
+<div class="sidebar">
+    <div class="sidebar-header">Комнаты</div>
+    <div class="sidebar-search">
+        <form action="{{ url_for('rooms.join_room') }}" method="post">
+            <input type="text" name="room_id" placeholder="Поиск по ID комнаты..." maxlength="10">
+            <button class="btn" type="submit" style="width: 100%; margin-top: 6px;">Войти</button>
+        </form>
+    </div>
+    <div class="sidebar-list">
+        {% for rid in session.get('visited_rooms', []) %}
+        <a href="{{ url_for('rooms.room', room_id=rid) }}"
+           class="room-item{% if current_room == rid %} active{% endif %}">
+            {{ rid }}
+        </a>
+        {% endfor %}
+    </div>
+    {% if session.get('user_type') == 'registered' %}
+    <div class="sidebar-footer">
+        <form action="{{ url_for('rooms.create_room') }}" method="post">
+            <button class="btn btn-primary" type="submit" style="width: 100%;">Создать комнату</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
