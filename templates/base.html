@@ -249,7 +249,8 @@
         .msg-header { display: flex; justify-content: space-between; align-items: center; }
         .msg-author { font-weight: 600; color: #2980b9; font-size: 13px; }
         .msg-time { font-size: 11px; color: #aaa; margin-left: 8px; }
-        .reply-btn {
+        .msg-actions { display: flex; gap: 2px; align-items: center; }
+        .reply-btn, .edit-btn {
             background: none;
             border: none;
             color: #bbb;
@@ -261,6 +262,7 @@
             transition: color 0.12s, background 0.12s;
         }
         .reply-btn:hover { color: #3daee9; background: #eef5fc; }
+        .edit-btn:hover { color: #f39c12; background: #fdf5e0; }
         .msg-reply-link {
             display: block;
             margin-top: 4px;

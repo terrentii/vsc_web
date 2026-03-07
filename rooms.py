@@ -150,6 +150,45 @@ def room(room_id):
     return render_template('room.html', room_id=room_id, config=config, messages=messages)
 
 
+@rooms_bp.route('/room/<room_id>/message/<int:msg_index>/edit', methods=['POST'])
+def edit_message(room_id, msg_index):
+    room_path = os.path.join(ROOMS_DIR, room_id)
+    if not os.path.isdir(room_path):
+        return jsonify({'ok': False}), 404
+
+    if not _can_access_room(room_id):
+        return jsonify({'ok': False}), 403
+
+    messages = _read_messages(room_id)
+    if msg_index < 1 or msg_index > len(messages):
+        return jsonify({'ok': False}), 404
+
+    msg = messages[msg_index - 1]
+
+    # проверяем авторство
+    if session.get('user_type') == 'registered':
+        current_user = session.get('login')
+    else:
+        current_user = session.get('anon_id')
+
+    if msg['author'] != current_user:
+        return jsonify({'ok': False}), 403
+
+    new_text = request.form.get('text', '').strip()
+    if not new_text:
+        return jsonify({'ok': False}), 400
+
+    messages[msg_index - 1]['text'] = new_text
+
+    msg_path = os.path.join(room_path, 'messages.csv')
+    with open(msg_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=['author', 'timestamp', 'text', 'reply_to'])
+        writer.writeheader()
+        writer.writerows(messages)
+
+    return jsonify({'ok': True, 'text': new_text})
+
+
 @rooms_bp.route('/room/<room_id>/messages/poll')
 def poll_messages(room_id):
     """Возвращает сообщения начиная с индекса after (1-based) в формате JSON."""

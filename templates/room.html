@@ -27,15 +27,22 @@
         <div class="chat-messages" id="messages">
             {% if messages %}
                 {% for msg in messages %}
+                {% set current_user = session.get('login') or session.get('anon_id') %}
                 <div class="msg" id="msg-{{ loop.index }}">
                     <div class="msg-header">
                         <span>
                             <span class="msg-author">{{ msg.author }}</span>
                             <span class="msg-time">{{ msg.timestamp | ts }}</span>
                         </span>
-                        <button type="button" class="reply-btn"
-                            data-index="{{ loop.index }}"
-                            data-author="{{ msg.author }}">Ответить</button>
+                        <span class="msg-actions">
+                            {% if msg.author == current_user %}
+                            <button type="button" class="edit-btn"
+                                data-index="{{ loop.index }}">Изменить</button>
+                            {% endif %}
+                            <button type="button" class="reply-btn"
+                                data-index="{{ loop.index }}"
+                                data-author="{{ msg.author }}">Ответить</button>
+                        </span>
                     </div>
                     {% set rt = msg.get('reply_to', '') | trim %}
                     {% if rt and rt.isdigit() %}
@@ -87,6 +94,8 @@
     const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
     let msgCount = {{ messages | length }};
     const ROOM_NAME = {{ (config.room_name if config.room_name else room_id) | tojson }};
+    const CURRENT_USER = {{ ((session.get('login') or session.get('anon_id')) or '') | tojson }};
+    const ROOM_ID = {{ room_id | tojson }};
 
     // Service Worker + уведомления
     let swReg = null;
@@ -141,18 +150,24 @@
             replyHtml = '<a href="#msg-' + esc(m.reply_to) + '" class="msg-reply-link">' +
                 'ответ на ' + esc(m.reply_author) + ': ' + esc(m.reply_text) + '</a>';
         }
+        const editBtn = (m.author === CURRENT_USER)
+            ? '<button type="button" class="edit-btn" data-index="' + m.index + '">Изменить</button>'
+            : '';
         return '<div class="msg" id="msg-' + m.index + '">' +
             '<div class="msg-header"><span>' +
                 '<span class="msg-author">' + esc(m.author) + '</span>' +
                 '<span class="msg-time">' + formatTs(m.timestamp) + '</span>' +
             '</span>' +
-            '<button type="button" class="reply-btn" data-index="' + m.index + '" data-author="' + esc(m.author) + '">Ответить</button>' +
+            '<span class="msg-actions">' +
+                editBtn +
+                '<button type="button" class="reply-btn" data-index="' + m.index + '" data-author="' + esc(m.author) + '">Ответить</button>' +
+            '</span>' +
             '</div>' +
             replyHtml +
             '<div class="msg-text">' + esc(m.text) + '</div></div>';
     }
 
-    // привязка кнопки «Ответить» к новым сообщениям
+    // привязка кнопок «Ответить» и «Изменить»
     function bindReply(el) {
         el.querySelectorAll('.reply-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -160,6 +175,61 @@
                 document.getElementById('reply-preview-text').textContent = 'Ответ на ' + btn.dataset.author;
                 document.getElementById('reply-preview').style.display = 'flex';
                 document.querySelector('.chat-input input[name="text"]').focus();
+            });
+        });
+    }
+
+    function bindEdit(el) {
+        el.querySelectorAll('.edit-btn').forEach(btn => {
+            if (btn._editBound) return;
+            btn._editBound = true;
+            btn.addEventListener('click', () => {
+                const msgEl = document.getElementById('msg-' + btn.dataset.index);
+                const textEl = msgEl.querySelector('.msg-text');
+                if (msgEl.querySelector('.edit-input')) return; // уже открыт
+
+                const original = textEl.textContent;
+                textEl.style.display = 'none';
+
+                const wrap = document.createElement('div');
+                wrap.className = 'edit-input';
+                wrap.innerHTML =
+                    '<input type="text" value="' + esc(original) + '" style="flex:1; padding:6px 12px; border:1px solid #3daee9; border-radius:999px; font-size:14px; outline:none;">' +
+                    '<button class="btn btn-primary" style="padding:5px 12px; font-size:13px;">Сохранить</button>' +
+                    '<button class="btn edit-cancel" style="padding:5px 10px; font-size:13px;">Отмена</button>';
+                wrap.style.cssText = 'display:flex; gap:6px; align-items:center; margin-top:4px;';
+                textEl.insertAdjacentElement('afterend', wrap);
+
+                const input = wrap.querySelector('input');
+                input.focus();
+                input.setSelectionRange(input.value.length, input.value.length);
+
+                const cancel = () => {
+                    wrap.remove();
+                    textEl.style.display = '';
+                };
+                wrap.querySelector('.edit-cancel').addEventListener('click', cancel);
+
+                const save = () => {
+                    const newText = input.value.trim();
+                    if (!newText) return;
+                    fetch('/room/' + ROOM_ID + '/message/' + btn.dataset.index + '/edit', {
+                        method: 'POST',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'text=' + encodeURIComponent(newText)
+                    }).then(r => r.json()).then(data => {
+                        if (data.ok) {
+                            textEl.textContent = data.text;
+                            wrap.remove();
+                            textEl.style.display = '';
+                        }
+                    });
+                };
+                wrap.querySelector('.btn.btn-primary').addEventListener('click', save);
+                input.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') { e.preventDefault(); save(); }
+                    if (e.key === 'Escape') cancel();
+                });
             });
         });
     }
@@ -189,6 +259,7 @@
                     notifyNewMsg(m);
                 });
                 bindReply(messagesEl);
+                bindEdit(messagesEl);
                 if (wasAtBottom) scrollBottom();
             })
             .catch(() => {});
@@ -235,8 +306,9 @@
         }
     }
 
-    // ответы (для сообщений уже на странице)
+    // ответы и редактирование (для сообщений уже на странице)
     bindReply(messagesEl);
+    bindEdit(messagesEl);
 
     document.getElementById('reply-cancel').addEventListener('click', () => {
         document.getElementById('reply_to').value = '';
