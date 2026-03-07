@@ -83,15 +83,129 @@
 {% endif %}
 
 <script>
-    const el = document.getElementById('messages');
-    el.scrollTop = el.scrollHeight;
+    const messagesEl = document.getElementById('messages');
+    const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+    let msgCount = {{ messages | length }};
+
+    // форматирование временной метки (UTC → московское время)
+    const TZ = 'Europe/Moscow';
+    function mskParts(date) {
+        return Object.fromEntries(
+            new Intl.DateTimeFormat('en', {
+                timeZone: TZ, year:'numeric', month:'numeric', day:'numeric',
+                hour:'2-digit', minute:'2-digit', hour12: false
+            }).formatToParts(date).map(({type, value}) => [type, value])
+        );
+    }
+    function formatTs(iso) {
+        try {
+            const dt = new Date(iso + 'Z'); // Z — явно UTC
+            const d = mskParts(dt);
+            const n = mskParts(new Date());
+            const time = d.hour + ':' + d.minute;
+            if (d.year === n.year && d.month === n.month && d.day === n.day) return 'сегодня ' + time;
+            const yest = new Date(); yest.setDate(yest.getDate() - 1);
+            const y = mskParts(yest);
+            if (d.year === y.year && d.month === y.month && d.day === y.day) return 'вчера ' + time;
+            return parseInt(d.day) + ' ' + MONTHS[parseInt(d.month) - 1] + ' ' + time;
+        } catch(e) { return iso; }
+    }
+
+    // экранирование HTML
+    function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    // создание HTML-элемента сообщения
+    function renderMsg(m) {
+        let replyHtml = '';
+        if (m.reply_to && m.reply_author) {
+            replyHtml = '<a href="#msg-' + esc(m.reply_to) + '" class="msg-reply-link">' +
+                'ответ на ' + esc(m.reply_author) + ': ' + esc(m.reply_text) + '</a>';
+        }
+        return '<div class="msg" id="msg-' + m.index + '">' +
+            '<div class="msg-header"><span>' +
+                '<span class="msg-author">' + esc(m.author) + '</span>' +
+                '<span class="msg-time">' + formatTs(m.timestamp) + '</span>' +
+            '</span>' +
+            '<button type="button" class="reply-btn" data-index="' + m.index + '" data-author="' + esc(m.author) + '">Ответить</button>' +
+            '</div>' +
+            replyHtml +
+            '<div class="msg-text">' + esc(m.text) + '</div></div>';
+    }
+
+    // привязка кнопки «Ответить» к новым сообщениям
+    function bindReply(el) {
+        el.querySelectorAll('.reply-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('reply_to').value = btn.dataset.index;
+                document.getElementById('reply-preview-text').textContent = 'Ответ на ' + btn.dataset.author;
+                document.getElementById('reply-preview').style.display = 'flex';
+                document.querySelector('.chat-input input[name="text"]').focus();
+            });
+        });
+    }
+
+    // прокрутка вниз
+    function scrollBottom() {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+    scrollBottom();
+
+    // поллинг новых сообщений каждые 3 секунды
+    const POLL_URL = '{{ url_for("rooms.poll_messages", room_id=room_id) }}';
+    setInterval(() => {
+        fetch(POLL_URL + '?after=' + msgCount)
+            .then(r => r.ok ? r.json() : [])
+            .then(msgs => {
+                if (!msgs.length) return;
+                // убираем заглушку «Сообщений пока нет»
+                const placeholder = messagesEl.querySelector('p[style]');
+                if (placeholder && placeholder.textContent.includes('Сообщений пока нет')) {
+                    placeholder.remove();
+                }
+                const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
+                msgs.forEach(m => {
+                    messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
+                    msgCount = m.index;
+                });
+                bindReply(messagesEl);
+                if (wasAtBottom) scrollBottom();
+            })
+            .catch(() => {});
+    }, 3000);
+
+    // AJAX-отправка сообщения
+    const msgForm = document.getElementById('msg-form');
+    const textInput = msgForm.querySelector('input[name="text"]');
+
+    msgForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const text = textInput.value.trim();
+        if (!text) return;
+
+        const formData = new FormData(msgForm);
+        fetch(msgForm.action, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        }).then(() => {
+            textInput.value = '';
+            document.getElementById('reply_to').value = '';
+            document.getElementById('reply-preview').style.display = 'none';
+        }).catch(() => {
+            // в случае ошибки — обычная отправка
+            msgForm.submit();
+        });
+    });
 
     // дисклеймер для анонимов — показывается один раз за сессию браузера
     function closeDisclaimer() {
         document.getElementById('disclaimer-overlay').style.display = 'none';
         sessionStorage.setItem('anon_disclaimer_shown', '1');
     }
-
     const overlay = document.getElementById('disclaimer-overlay');
     if (overlay) {
         if (sessionStorage.getItem('anon_disclaimer_shown')) {
@@ -99,17 +213,8 @@
         }
     }
 
-    // ответы
-    document.querySelectorAll('.reply-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const idx = btn.dataset.index;
-            const author = btn.dataset.author;
-            document.getElementById('reply_to').value = idx;
-            document.getElementById('reply-preview-text').textContent = 'Ответ на ' + author;
-            document.getElementById('reply-preview').style.display = 'flex';
-            document.querySelector('.chat-input input[name="text"]').focus();
-        });
-    });
+    // ответы (для сообщений уже на странице)
+    bindReply(messagesEl);
 
     document.getElementById('reply-cancel').addEventListener('click', () => {
         document.getElementById('reply_to').value = '';

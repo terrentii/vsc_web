@@ -3,7 +3,7 @@ import csv
 import shutil
 import random
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, session
+from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
 
 rooms_bp = Blueprint('rooms', __name__)
 
@@ -150,6 +150,44 @@ def room(room_id):
     return render_template('room.html', room_id=room_id, config=config, messages=messages)
 
 
+@rooms_bp.route('/room/<room_id>/messages/poll')
+def poll_messages(room_id):
+    """Возвращает сообщения начиная с индекса after (1-based) в формате JSON."""
+    room_path = os.path.join(ROOMS_DIR, room_id)
+    if not os.path.isdir(room_path):
+        return jsonify([]), 404
+
+    if not _can_access_room(room_id):
+        return jsonify([]), 403
+
+    after = request.args.get('after', '0')
+    after = int(after) if after.isdigit() else 0
+
+    messages = _read_messages(room_id)
+    total = len(messages)
+
+    new_msgs = []
+    for i in range(after, total):
+        msg = messages[i]
+        entry = {
+            'index': i + 1,
+            'author': msg['author'],
+            'timestamp': msg['timestamp'],
+            'text': msg['text'],
+            'reply_to': msg.get('reply_to', '').strip(),
+        }
+        # добавляем данные об оригинальном сообщении для ответов
+        rt = entry['reply_to']
+        if rt and rt.isdigit():
+            ri = int(rt)
+            if 0 < ri <= total:
+                entry['reply_author'] = messages[ri - 1]['author']
+                entry['reply_text'] = messages[ri - 1]['text'][:60]
+        new_msgs.append(entry)
+
+    return jsonify(new_msgs)
+
+
 @rooms_bp.route('/room/<room_id>/message', methods=['POST'])
 def post_message(room_id):
     room_path = os.path.join(ROOMS_DIR, room_id)
@@ -175,6 +213,10 @@ def post_message(room_id):
     with open(msg_path, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow([author, now, text, reply_to])
+
+    # AJAX-запрос — возвращаем JSON
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True})
 
     return redirect(url_for('rooms.room', room_id=room_id))
 
