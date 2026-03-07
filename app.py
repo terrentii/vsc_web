@@ -1,7 +1,7 @@
 import os
 import uuid
 from datetime import datetime, timezone, timedelta
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory
 from flask_session import Session
 from auth import auth_bp
 from rooms import rooms_bp, get_room_display_name
@@ -57,6 +57,11 @@ def assign_anon_id():
         existing = session.get('_anon_counter', 0) + 1
         session['_anon_counter'] = existing
         session['anon_id'] = f'Anon{existing}'
+
+
+@app.route('/sw.js')
+def service_worker():
+    return send_from_directory('static', 'sw.js', mimetype='application/javascript')
 
 
 @app.route('/')
