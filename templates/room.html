@@ -86,6 +86,22 @@
     const messagesEl = document.getElementById('messages');
     const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
     let msgCount = {{ messages | length }};
+    const ROOM_NAME = {{ (config.room_name if config.room_name else room_id) | tojson }};
+
+    // уведомления
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+    function notifyNewMsg(msg) {
+        if (!document.hidden) return;
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        const n = new Notification(ROOM_NAME, {
+            body: msg.author + ': ' + msg.text.slice(0, 100),
+            tag: 'room-msg-' + msg.index
+        });
+        n.onclick = () => { window.focus(); n.close(); };
+        setTimeout(() => n.close(), 5000);
+    }
 
     // форматирование временной метки (UTC → московское время)
     const TZ = 'Europe/Moscow';
@@ -170,6 +186,7 @@
                 msgs.forEach(m => {
                     messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
                     msgCount = m.index;
+                    notifyNewMsg(m);
                 });
                 bindReply(messagesEl);
                 if (wasAtBottom) scrollBottom();
