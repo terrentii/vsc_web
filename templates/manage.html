@@ -2,7 +2,7 @@
 {% block title %}Управление — Комната {{ room_id }}{% endblock %}
 
 {% block content %}
-<div class="centered-container" style="max-width: 500px;">
+<div class="centered-container" style="max-width: 500px; max-height: calc(100vh - 60px); overflow-y: auto; display: flex; flex-direction: column;">
     <h2>Управление комнатой {{ room_id }}</h2>
 
     <form method="post" style="margin-bottom: 20px;">
@@ -24,21 +24,36 @@
         <button class="btn btn-primary" type="submit">Сохранить</button>
     </form>
 
-    <h3 style="font-size: 14px; margin-bottom: 8px; color: #333;">Пользователи</h3>
-    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-        <tr style="border-bottom: 1px solid #ddd; color: #666;">
-            <th style="text-align: left; padding: 6px;">Логин</th>
-            <th style="text-align: left; padding: 6px;">Присоединился</th>
-            <th style="text-align: left; padding: 6px;">Роль</th>
-        </tr>
-        {% for user in users %}
-        <tr style="border-bottom: 1px solid #eee;">
-            <td style="padding: 6px;">{{ user.login }}</td>
-            <td style="padding: 6px; color: #888;">{{ user.joined_at }}</td>
-            <td style="padding: 6px;">{{ user.role }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <h3 style="font-size: 14px; margin-bottom: 8px; color: #333; flex-shrink: 0;">Пользователи</h3>
+    <div style="overflow-y: auto; flex: 1; min-height: 80px; border: 1px solid #e8e8e8; border-radius: 10px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+                <tr style="background: #f5f5f5; border-bottom: 1px solid #ddd; color: #666; position: sticky; top: 0;">
+                    <th style="text-align: left; padding: 7px 10px;">Логин</th>
+                    <th style="text-align: left; padding: 7px 10px;">Присоединился</th>
+                    <th style="text-align: left; padding: 7px 10px;">Роль</th>
+                    <th style="padding: 7px 10px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr style="border-bottom: 1px solid #f0f0f0;">
+                    <td style="padding: 7px 10px;">{{ user.login }}</td>
+                    <td style="padding: 7px 10px; color: #888;">{{ user.joined_at | ts }}</td>
+                    <td style="padding: 7px 10px;">{{ user.role }}</td>
+                    <td style="padding: 4px 10px; text-align: right;">
+                        {% if user.role != 'godfather' %}
+                        <form action="{{ url_for('rooms.kick_user', room_id=room_id) }}" method="post" style="display:inline;">
+                            <input type="hidden" name="login" value="{{ user.login }}">
+                            <button class="btn" type="submit" style="color: #da4453; border-color: #da4453; font-size: 11px; padding: 2px 8px;">Удалить</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
         <a href="{{ url_for('rooms.room', room_id=room_id) }}" style="font-size: 13px;">Назад в комнату</a>

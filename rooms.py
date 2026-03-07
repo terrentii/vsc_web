@@ -231,6 +231,33 @@ def delete_room(room_id):
     return redirect(url_for('index'))
 
 
+@rooms_bp.route('/room/<room_id>/manage/kick', methods=['POST'])
+def kick_user(room_id):
+    room_path = os.path.join(ROOMS_DIR, room_id)
+    if not os.path.isdir(room_path):
+        return redirect(url_for('index'))
+
+    if session.get('user_type') != 'registered':
+        return redirect(url_for('rooms.room', room_id=room_id))
+
+    config = _read_config(room_id)
+    if config['creator_login'] != session.get('login'):
+        return redirect(url_for('rooms.room', room_id=room_id))
+
+    target = request.form.get('login', '').strip()
+    # нельзя удалить самого себя (прародителя)
+    if target and target != config['creator_login']:
+        _remove_user_from_room(room_id, target)
+        # убираем комнату из списка посещённых у удалённого пользователя
+        from auth import load_user_rooms, save_user_rooms
+        user_rooms = load_user_rooms(target)
+        if room_id in user_rooms:
+            user_rooms.remove(room_id)
+            save_user_rooms(target, user_rooms)
+
+    return redirect(url_for('rooms.manage_room', room_id=room_id))
+
+
 @rooms_bp.route('/room/<room_id>/manage', methods=['GET', 'POST'])
 def manage_room(room_id):
     room_path = os.path.join(ROOMS_DIR, room_id)
