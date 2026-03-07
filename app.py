@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_session import Session
 from auth import auth_bp
@@ -21,20 +21,25 @@ app.register_blueprint(rooms_bp)
 MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
           'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 
+MSK = timezone(timedelta(hours=3))
+
 
 @app.template_filter('ts')
 def format_ts(value):
-    """Форматирует ISO-timestamp в читабельный вид: сегодня/вчера/дата + время."""
+    """Форматирует ISO-timestamp (UTC) в московское время: сегодня/вчера/дата + HH:MM."""
     try:
         dt = datetime.fromisoformat(value)
+        # timestamp без tzinfo — считаем UTC, переводим в MSK
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc).astimezone(MSK)
     except (ValueError, TypeError):
         return value
-    today = date.today()
+    today_msk = datetime.now(MSK).date()
     d = dt.date()
     time_str = dt.strftime('%H:%M')
-    if d == today:
+    if d == today_msk:
         return f'сегодня {time_str}'
-    if (today - d).days == 1:
+    if (today_msk - d).days == 1:
         return f'вчера {time_str}'
     return f'{d.day} {MONTHS[d.month - 1]} {time_str}'
 
