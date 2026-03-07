@@ -376,12 +376,103 @@
             font-size: 14px;
             background: #fafafa;
         }
+
+        /* ── Hamburger (скрыта на десктопе) ── */
+        .hamburger-btn {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 2px 8px;
+            color: #222;
+            border-radius: 999px;
+            transition: background 0.15s;
+            line-height: 1;
+        }
+        .hamburger-btn:hover { background: #dce4f0; }
+
+        /* ── Оверлей сайдбара (скрыт на десктопе) ── */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 99;
+        }
+
+        /* ── Мобильная версия ── */
+        @media (max-width: 768px) {
+            .hamburger-btn { display: block; }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                z-index: 100;
+                width: 280px;
+                transform: translateX(-100%);
+                transition: transform 0.25s ease;
+                box-shadow: none;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+            }
+            .sidebar-overlay.open {
+                display: block;
+            }
+
+            .chat-panel { width: 100%; }
+
+            .chat-header {
+                font-size: 13px;
+                padding: 8px 12px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+                justify-content: center;
+                align-items: center;
+            }
+
+            .chat-messages { padding: 10px 10px 6px; }
+
+            .chat-input { padding: 8px 8px 10px; gap: 6px; }
+            .chat-input input[type="text"] { padding: 8px 14px; font-size: 14px; }
+            .chat-input .btn { padding: 8px 14px; font-size: 13px; }
+
+            .msg { padding: 8px 10px; }
+            .msg-text { font-size: 14px; }
+
+            .menubar { padding: 0 8px; }
+            .menubar-right { gap: 4px; }
+            .menubar-right a, .menubar button.menu-btn { padding: 3px 7px; font-size: 12px; }
+
+            .statusbar { font-size: 10px; padding: 0 8px; }
+
+            .centered-container {
+                margin: 20px 12px;
+                padding: 20px 18px;
+                border-radius: 14px;
+                max-width: none;
+            }
+
+            .disclaimer-box {
+                margin: 0 12px;
+                padding: 22px 20px;
+            }
+
+            /* на страницах без мессенджера app-body должен скроллиться */
+            .app-body { overflow-y: auto; }
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
     <div class="menubar">
         <div class="menubar-left">
+            <button class="hamburger-btn" id="hamburger-btn" type="button" aria-label="Меню">☰</button>
             <a href="{{ url_for('index') }}">МЫС Web</a>
         </div>
         <div class="menubar-right">
@@ -404,5 +495,28 @@
     <div class="statusbar">
         {% block statusbar %}{% endblock %}
     </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <script>
+    (function() {
+        const btn = document.getElementById('hamburger-btn');
+        const overlay = document.getElementById('sidebar-overlay');
+        const sidebar = document.querySelector('.sidebar');
+        if (!btn || !sidebar) return;
+
+        function toggleSidebar() {
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('open');
+        }
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+        }
+
+        btn.addEventListener('click', toggleSidebar);
+        overlay.addEventListener('click', closeSidebar);
+    })();
+    </script>
 </body>
 </html>
