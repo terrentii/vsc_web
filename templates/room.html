@@ -88,19 +88,19 @@
     let msgCount = {{ messages | length }};
     const ROOM_NAME = {{ (config.room_name if config.room_name else room_id) | tojson }};
 
-    // уведомления
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
+    // Service Worker + уведомления
+    let swReg = null;
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').then(reg => { swReg = reg; });
     }
+
     function notifyNewMsg(msg) {
         if (!document.hidden) return;
-        if (!('Notification' in window) || Notification.permission !== 'granted') return;
-        const n = new Notification(ROOM_NAME, {
+        if (!swReg || Notification.permission !== 'granted') return;
+        swReg.showNotification(ROOM_NAME, {
             body: msg.author + ': ' + msg.text.slice(0, 100),
             tag: 'room-msg-' + msg.index
         });
-        n.onclick = () => { window.focus(); n.close(); };
-        setTimeout(() => n.close(), 5000);
     }
 
     // форматирование временной метки (UTC → московское время)
@@ -202,6 +202,11 @@
         e.preventDefault();
         const text = textInput.value.trim();
         if (!text) return;
+
+        // запрашиваем разрешение на уведомления при первой отправке (нужен жест пользователя)
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
 
         const formData = new FormData(msgForm);
         fetch(msgForm.action, {
