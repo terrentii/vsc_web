@@ -42,7 +42,6 @@ def _is_user_in_room(room_id, login):
 
 
 def get_room_display_name(room_id):
-    """Возвращает имя комнаты если задано, иначе её ID."""
     try:
         config = _read_config(room_id)
         name = config.get('room_name', '').strip()
@@ -165,7 +164,6 @@ def edit_message(room_id, msg_index):
 
     msg = messages[msg_index - 1]
 
-    # проверяем авторство
     if session.get('user_type') == 'registered':
         current_user = session.get('login')
     else:
@@ -215,7 +213,6 @@ def poll_messages(room_id):
             'text': msg['text'],
             'reply_to': msg.get('reply_to', '').strip(),
         }
-        # добавляем данные об оригинальном сообщении для ответов
         rt = entry['reply_to']
         if rt and rt.isdigit():
             ri = int(rt)
@@ -253,7 +250,6 @@ def post_message(room_id):
         writer = csv.writer(f)
         writer.writerow([author, now, text, reply_to])
 
-    # AJAX-запрос — возвращаем JSON
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'ok': True})
 
@@ -272,8 +268,7 @@ def leave_room(room_id):
     login = session['login']
     config = _read_config(room_id)
 
-    # godfather не может покинуть свою комнату
-    if config['creator_login'] == login:
+    if config['creator_login'] == login:  # создатель не может покинуть комнату
         return redirect(url_for('rooms.room', room_id=room_id))
 
     _remove_user_from_room(room_id, login)
@@ -295,7 +290,6 @@ def delete_room(room_id):
     if config['creator_login'] != session.get('login'):
         return redirect(url_for('rooms.room', room_id=room_id))
 
-    # убираем комнату из списков всех её участников
     from auth import load_user_rooms, save_user_rooms
     users = _read_users(room_id)
     for u in users:
@@ -304,7 +298,6 @@ def delete_room(room_id):
             user_rooms.remove(room_id)
             save_user_rooms(u['login'], user_rooms)
 
-    # удаляем папку комнаты целиком
     shutil.rmtree(room_path)
 
     _untrack_room(room_id)
@@ -326,10 +319,8 @@ def kick_user(room_id):
         return redirect(url_for('rooms.room', room_id=room_id))
 
     target = request.form.get('login', '').strip()
-    # нельзя удалить самого себя (прародителя)
-    if target and target != config['creator_login']:
+    if target and target != config['creator_login']:  # нельзя кикнуть создателя
         _remove_user_from_room(room_id, target)
-        # убираем комнату из списка посещённых у удалённого пользователя
         from auth import load_user_rooms, save_user_rooms
         user_rooms = load_user_rooms(target)
         if room_id in user_rooms:

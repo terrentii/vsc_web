@@ -97,7 +97,6 @@
     const CURRENT_USER = {{ ((session.get('login') or session.get('anon_id')) or '') | tojson }};
     const ROOM_ID = {{ room_id | tojson }};
 
-    // Service Worker + уведомления
     let swReg = null;
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').then(reg => { swReg = reg; });
@@ -112,7 +111,6 @@
         });
     }
 
-    // форматирование временной метки (UTC → московское время)
     const TZ = 'Europe/Moscow';
     function mskParts(date) {
         return Object.fromEntries(
@@ -124,7 +122,7 @@
     }
     function formatTs(iso) {
         try {
-            const dt = new Date(iso + 'Z'); // Z — явно UTC
+            const dt = new Date(iso + 'Z'); // UTC
             const d = mskParts(dt);
             const n = mskParts(new Date());
             const time = d.hour + ':' + d.minute;
@@ -136,14 +134,12 @@
         } catch(e) { return iso; }
     }
 
-    // экранирование HTML
     function esc(s) {
         const d = document.createElement('div');
         d.textContent = s;
         return d.innerHTML;
     }
 
-    // создание HTML-элемента сообщения
     function renderMsg(m) {
         let replyHtml = '';
         if (m.reply_to && m.reply_author) {
@@ -167,7 +163,6 @@
             '<div class="msg-text">' + esc(m.text) + '</div></div>';
     }
 
-    // привязка кнопок «Ответить» и «Изменить»
     function bindReply(el) {
         el.querySelectorAll('.reply-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -186,7 +181,7 @@
             btn.addEventListener('click', () => {
                 const msgEl = document.getElementById('msg-' + btn.dataset.index);
                 const textEl = msgEl.querySelector('.msg-text');
-                if (msgEl.querySelector('.edit-input')) return; // уже открыт
+                if (msgEl.querySelector('.edit-input')) return;
 
                 const original = textEl.textContent;
                 textEl.style.display = 'none';
@@ -234,20 +229,17 @@
         });
     }
 
-    // прокрутка вниз
     function scrollBottom() {
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }
     scrollBottom();
 
-    // поллинг новых сообщений каждые 3 секунды
     const POLL_URL = '{{ url_for("rooms.poll_messages", room_id=room_id) }}';
     setInterval(() => {
         fetch(POLL_URL + '?after=' + msgCount)
             .then(r => r.ok ? r.json() : [])
             .then(msgs => {
                 if (!msgs.length) return;
-                // убираем заглушку «Сообщений пока нет»
                 const placeholder = messagesEl.querySelector('p[style]');
                 if (placeholder && placeholder.textContent.includes('Сообщений пока нет')) {
                     placeholder.remove();
@@ -265,7 +257,6 @@
             .catch(() => {});
     }, 3000);
 
-    // AJAX-отправка сообщения
     const msgForm = document.getElementById('msg-form');
     const textInput = msgForm.querySelector('input[name="text"]');
 
@@ -274,7 +265,6 @@
         const text = textInput.value.trim();
         if (!text) return;
 
-        // запрашиваем разрешение на уведомления при первой отправке (нужен жест пользователя)
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
         }
@@ -289,12 +279,10 @@
             document.getElementById('reply_to').value = '';
             document.getElementById('reply-preview').style.display = 'none';
         }).catch(() => {
-            // в случае ошибки — обычная отправка
             msgForm.submit();
         });
     });
 
-    // дисклеймер для анонимов — показывается один раз за сессию браузера
     function closeDisclaimer() {
         document.getElementById('disclaimer-overlay').style.display = 'none';
         sessionStorage.setItem('anon_disclaimer_shown', '1');
@@ -306,7 +294,6 @@
         }
     }
 
-    // ответы и редактирование (для сообщений уже на странице)
     bindReply(messagesEl);
     bindEdit(messagesEl);
 
