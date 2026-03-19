@@ -26,10 +26,8 @@ MSK = timezone(timedelta(hours=3))
 
 @app.template_filter('ts')
 def format_ts(value):
-    """Форматирует ISO-timestamp (UTC) в московское время: сегодня/вчера/дата + HH:MM."""
     try:
         dt = datetime.fromisoformat(value)
-        # timestamp без tzinfo — считаем UTC, переводим в MSK
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc).astimezone(MSK)
     except (ValueError, TypeError):
@@ -46,7 +44,6 @@ def format_ts(value):
 
 @app.context_processor
 def inject_room_helpers():
-    # делаем get_room_display_name доступной во всех шаблонах
     return {'room_display_name': get_room_display_name}
 
 
