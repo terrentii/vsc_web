@@ -273,6 +273,91 @@
         }
         .msg-reply-link:hover { background: #e2eefa; text-decoration: none; }
         .msg-text { margin-top: 4px; font-size: 13px; word-wrap: break-word; color: #222; line-height: 1.45; }
+        .msg-media { margin-top: 6px; }
+        .msg-media img {
+            max-width: 320px;
+            max-height: 280px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .msg-media img:hover { opacity: 0.85; }
+        .msg-media-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            background: #f0f4f8;
+            border: 1px solid #d8e0e8;
+            border-radius: 10px;
+            font-size: 12px;
+            color: #2980b9;
+            text-decoration: none;
+            transition: background 0.12s;
+        }
+        .msg-media-link:hover { background: #e2eefa; text-decoration: none; }
+        .upload-progress {
+            display: none;
+            padding: 0 20px 6px;
+            background: #f5f5f5;
+        }
+        .upload-progress-bar {
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .upload-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #3daee9;
+            border-radius: 2px;
+            transition: width 0.2s;
+        }
+        .upload-preview {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 20px;
+            font-size: 12px;
+            color: #555;
+            background: #f0f7ec;
+            border-bottom: 1px solid #d8e8d0;
+        }
+        .upload-preview-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+        .upload-preview-cancel {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            color: #aaa;
+            padding: 0 4px;
+            flex-shrink: 0;
+            transition: color 0.12s;
+        }
+        .upload-preview-cancel:hover { color: #da4453; }
+        .attach-btn {
+            background: none;
+            border: 1.5px solid #d0d0d0;
+            border-radius: 999px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            color: #888;
+            transition: border-color 0.15s, color 0.15s;
+            flex-shrink: 0;
+        }
+        .attach-btn:hover { border-color: #3daee9; color: #3daee9; }
+        .attach-btn.has-file { border-color: #27ae60; color: #27ae60; }
 
         #msg-form { background: transparent; }
         .reply-preview {

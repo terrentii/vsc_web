@@ -9,6 +9,7 @@ from rooms import rooms_bp, get_room_display_name
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', uuid.uuid4().hex)
 
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 ** 3  # 5 GB
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = os.path.join(os.path.dirname(__file__), 'flask_session')
 app.config['SESSION_PERMANENT'] = False

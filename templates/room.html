@@ -54,6 +54,25 @@
                         {% endif %}
                     {% endif %}
                     <div class="msg-text">{{ msg.text }}</div>
+                    {% set media_file = msg.get('media', '') | trim %}
+                    {% if media_file %}
+                    <div class="msg-media">
+                        {% set ml = media_file.lower() %}
+                        {% if ml.endswith('.png') or ml.endswith('.jpg') or ml.endswith('.jpeg') or ml.endswith('.gif') or ml.endswith('.webp') or ml.endswith('.svg') %}
+                            <a href="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}" target="_blank">
+                                <img src="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}" alt="media" loading="lazy">
+                            </a>
+                        {% elif ml.endswith('.mp4') or ml.endswith('.webm') or ml.endswith('.mov') %}
+                            <video controls preload="metadata" style="max-width:320px; border-radius:10px;">
+                                <source src="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}">
+                            </video>
+                        {% else %}
+                            <a class="msg-media-link" href="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}" download>
+                                📎 {{ media_file.split('_', 1)[1] if '_' in media_file else media_file }}
+                            </a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             {% else %}
@@ -63,12 +82,25 @@
 
         <form id="msg-form" action="{{ url_for('rooms.post_message', room_id=room_id) }}" method="post">
             <input type="hidden" name="reply_to" id="reply_to" value="">
+            <input type="hidden" name="media" id="media-filename" value="">
+            <input type="file" id="file-input" style="display:none">
             <div class="reply-preview" id="reply-preview">
                 <span id="reply-preview-text"></span>
                 <button type="button" class="reply-cancel" id="reply-cancel">&times;</button>
             </div>
+            <div class="upload-preview" id="upload-preview">
+                <span>📎</span>
+                <span class="upload-preview-name" id="upload-preview-name"></span>
+                <button type="button" class="upload-preview-cancel" id="upload-cancel">&times;</button>
+            </div>
+            <div class="upload-progress" id="upload-progress">
+                <div class="upload-progress-bar">
+                    <div class="upload-progress-fill" id="upload-progress-fill"></div>
+                </div>
+            </div>
             <div class="chat-input">
-                <input type="text" name="text" placeholder="Введите сообщение..." autocomplete="off" required>
+                <button type="button" class="attach-btn" id="attach-btn" title="Прикрепить файл">📎</button>
+                <input type="text" name="text" placeholder="Сообщение или файл..." autocomplete="off">
                 <button class="btn btn-primary" type="submit">Отправить</button>
             </div>
         </form>
@@ -140,6 +172,23 @@
         return d.innerHTML;
     }
 
+    const IMAGE_EXTS = ['png','jpg','jpeg','gif','webp','svg'];
+    const VIDEO_EXTS = ['mp4','webm','mov'];
+
+    function mediaHtml(media) {
+        if (!media) return '';
+        const ext = media.split('.').pop().toLowerCase();
+        const url = '/room/' + ROOM_ID + '/media/' + encodeURIComponent(media);
+        const displayName = media.indexOf('_') > -1 ? media.substring(media.indexOf('_') + 1) : media;
+        if (IMAGE_EXTS.includes(ext)) {
+            return '<div class="msg-media"><a href="' + esc(url) + '" target="_blank"><img src="' + esc(url) + '" alt="media" loading="lazy"></a></div>';
+        }
+        if (VIDEO_EXTS.includes(ext)) {
+            return '<div class="msg-media"><video controls preload="metadata" style="max-width:320px;border-radius:10px;"><source src="' + esc(url) + '"></video></div>';
+        }
+        return '<div class="msg-media"><a class="msg-media-link" href="' + esc(url) + '" download>📎 ' + esc(displayName) + '</a></div>';
+    }
+
     function renderMsg(m) {
         let replyHtml = '';
         if (m.reply_to && m.reply_author) {
@@ -160,7 +209,9 @@
             '</span>' +
             '</div>' +
             replyHtml +
-            '<div class="msg-text">' + esc(m.text) + '</div></div>';
+            '<div class="msg-text">' + esc(m.text) + '</div>' +
+            mediaHtml(m.media) +
+            '</div>';
     }
 
     function bindReply(el) {
@@ -259,11 +310,74 @@
 
     const msgForm = document.getElementById('msg-form');
     const textInput = msgForm.querySelector('input[name="text"]');
+    const fileInput = document.getElementById('file-input');
+    const attachBtn = document.getElementById('attach-btn');
+    const mediaFilename = document.getElementById('media-filename');
+    const uploadPreview = document.getElementById('upload-preview');
+    const uploadPreviewName = document.getElementById('upload-preview-name');
+    const uploadProgress = document.getElementById('upload-progress');
+    const uploadProgressFill = document.getElementById('upload-progress-fill');
+
+    attachBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', function() {
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        uploadPreviewName.textContent = file.name;
+        uploadPreview.style.display = 'flex';
+        uploadProgress.style.display = 'block';
+        uploadProgressFill.style.width = '0%';
+        attachBtn.classList.add('has-file');
+
+        const fd = new FormData();
+        fd.append('file', file);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/room/' + ROOM_ID + '/upload');
+        xhr.upload.addEventListener('progress', function(e) {
+            if (e.lengthComputable) {
+                uploadProgressFill.style.width = Math.round(e.loaded / e.total * 100) + '%';
+            }
+        });
+        xhr.addEventListener('load', function() {
+            uploadProgress.style.display = 'none';
+            try {
+                const data = JSON.parse(xhr.responseText);
+                if (data.ok) {
+                    mediaFilename.value = data.filename;
+                } else {
+                    clearUpload();
+                    alert(data.error || 'Ошибка загрузки');
+                }
+            } catch(e) {
+                clearUpload();
+                alert('Ошибка загрузки');
+            }
+        });
+        xhr.addEventListener('error', function() {
+            uploadProgress.style.display = 'none';
+            clearUpload();
+            alert('Ошибка загрузки');
+        });
+        xhr.send(fd);
+    });
+
+    function clearUpload() {
+        fileInput.value = '';
+        mediaFilename.value = '';
+        uploadPreview.style.display = 'none';
+        uploadProgress.style.display = 'none';
+        attachBtn.classList.remove('has-file');
+    }
+
+    document.getElementById('upload-cancel').addEventListener('click', clearUpload);
 
     msgForm.addEventListener('submit', function(e) {
         e.preventDefault();
         const text = textInput.value.trim();
-        if (!text) return;
+        const media = mediaFilename.value;
+        if (!text && !media) return;
 
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
@@ -278,6 +392,7 @@
             textInput.value = '';
             document.getElementById('reply_to').value = '';
             document.getElementById('reply-preview').style.display = 'none';
+            clearUpload();
         }).catch(() => {
             msgForm.submit();
         });
