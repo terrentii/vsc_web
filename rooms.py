@@ -2,12 +2,46 @@ import os
 import csv
 import shutil
 import random
+import uuid
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_from_directory
 
 rooms_bp = Blueprint('rooms', __name__)
 
 ROOMS_DIR = os.path.join(os.path.dirname(__file__), 'rooms')
+
+MAX_MEDIA_BYTES = 20 * 1024 ** 3  # 20 GB
+
+
+def _cleanup_media(max_bytes=None):
+    if max_bytes is None:
+        max_bytes = MAX_MEDIA_BYTES
+    files = []
+    if not os.path.isdir(ROOMS_DIR):
+        return
+    for room_dir in os.listdir(ROOMS_DIR):
+        media_path = os.path.join(ROOMS_DIR, room_dir, 'media')
+        if not os.path.isdir(media_path):
+            continue
+        for fname in os.listdir(media_path):
+            fp = os.path.join(media_path, fname)
+            try:
+                stat = os.stat(fp)
+                files.append((fp, stat.st_mtime, stat.st_size))
+            except OSError:
+                continue
+    total = sum(f[2] for f in files)
+    if total <= max_bytes:
+        return
+    files.sort(key=lambda f: f[1])  # oldest first
+    for fp, mtime, size in files:
+        if total <= max_bytes:
+            break
+        try:
+            os.remove(fp)
+        except OSError:
+            continue
+        total -= size
 
 
 def _generate_room_id():
@@ -89,7 +123,9 @@ def create_room():
 
     with open(os.path.join(room_path, 'messages.csv'), 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['author', 'timestamp', 'text', 'reply_to'])
+        writer.writerow(['author', 'timestamp', 'text', 'reply_to', 'media'])
+
+    os.makedirs(os.path.join(room_path, 'media'), exist_ok=True)
 
     with open(os.path.join(room_path, 'users.csv'), 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
@@ -178,11 +214,14 @@ def edit_message(room_id, msg_index):
 
     messages[msg_index - 1]['text'] = new_text
 
+    fieldnames = ['author', 'timestamp', 'text', 'reply_to', 'media']
     msg_path = os.path.join(room_path, 'messages.csv')
     with open(msg_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['author', 'timestamp', 'text', 'reply_to'])
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
         writer.writeheader()
-        writer.writerows(messages)
+        for m in messages:
+            row = {fn: m.get(fn, '') for fn in fieldnames}
+            writer.writerow(row)
 
     return jsonify({'ok': True, 'text': new_text})
 
@@ -212,6 +251,7 @@ def poll_messages(room_id):
             'timestamp': msg['timestamp'],
             'text': msg['text'],
             'reply_to': msg.get('reply_to', '').strip(),
+            'media': msg.get('media', '').strip(),
         }
         rt = entry['reply_to']
         if rt and rt.isdigit():
@@ -234,7 +274,8 @@ def post_message(room_id):
         return redirect(url_for('index'))
 
     text = request.form.get('text', '').strip()
-    if not text:
+    media = request.form.get('media', '').strip()
+    if not text and not media:
         return redirect(url_for('rooms.room', room_id=room_id))
 
     reply_to = request.form.get('reply_to', '').strip()
@@ -248,12 +289,50 @@ def post_message(room_id):
     msg_path = os.path.join(room_path, 'messages.csv')
     with open(msg_path, 'a', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow([author, now, text, reply_to])
+        writer.writerow([author, now, text, reply_to, media])
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'ok': True})
 
     return redirect(url_for('rooms.room', room_id=room_id))
+
+
+@rooms_bp.route('/room/<room_id>/upload', methods=['POST'])
+def upload_media(room_id):
+    room_path = os.path.join(ROOMS_DIR, room_id)
+    if not os.path.isdir(room_path):
+        return jsonify({'ok': False, 'error': 'Room not found'}), 404
+
+    if not _can_access_room(room_id):
+        return jsonify({'ok': False, 'error': 'Access denied'}), 403
+
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return jsonify({'ok': False, 'error': 'No file'}), 400
+
+    media_dir = os.path.join(room_path, 'media')
+    os.makedirs(media_dir, exist_ok=True)
+
+    original_name = file.filename.rsplit('/', 1)[-1].rsplit('\\', 1)[-1]
+    safe_name = uuid.uuid4().hex + '_' + original_name
+    file.save(os.path.join(media_dir, safe_name))
+
+    _cleanup_media()
+
+    return jsonify({'ok': True, 'filename': safe_name})
+
+
+@rooms_bp.route('/room/<room_id>/media/<filename>')
+def serve_media(room_id, filename):
+    room_path = os.path.join(ROOMS_DIR, room_id)
+    if not os.path.isdir(room_path):
+        return '', 404
+
+    if not _can_access_room(room_id):
+        return '', 403
+
+    media_dir = os.path.join(room_path, 'media')
+    return send_from_directory(media_dir, filename)
 
 
 @rooms_bp.route('/room/<room_id>/leave', methods=['POST'])
