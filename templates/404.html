@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}404 — Страница не найдена{% endblock %}
+
+{% block content %}
+<div class="app-body">
+    <div class="error-page">
+        <h1>404</h1>
+        <p>Страница не найдена.</p>
+        <a href="{{ url_for('index') }}" class="btn btn-primary" style="margin-top: 8px;">На главную</a>
+    </div>
+</div>
+{% endblock %}

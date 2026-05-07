@@ -1,16 +1,34 @@
 import os
-import csv
 import shutil
 import random
 import uuid
 from datetime import datetime
+
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_from_directory
+
+from extensions import db
+from models import Room, Message, RoomMember
 
 rooms_bp = Blueprint('rooms', __name__)
 
 ROOMS_DIR = os.path.join(os.path.dirname(__file__), 'rooms')
-
 MAX_MEDIA_BYTES = 20 * 1024 ** 3  # 20 GB
+
+ALLOWED_MIMES = {
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    'image/bmp', 'image/tiff',
+    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
+    'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/webm',
+    'application/pdf',
+    'text/plain', 'text/csv',
+    'application/zip', 'application/x-zip-compressed',
+    'application/x-rar-compressed', 'application/vnd.rar',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/octet-stream',  # бинарные файлы без определённого типа
+}
 
 
 def _cleanup_media(max_bytes=None):
@@ -33,7 +51,7 @@ def _cleanup_media(max_bytes=None):
     total = sum(f[2] for f in files)
     if total <= max_bytes:
         return
-    files.sort(key=lambda f: f[1])  # oldest first
+    files.sort(key=lambda f: f[1])
     for fp, mtime, size in files:
         if total <= max_bytes:
             break
@@ -47,50 +65,48 @@ def _cleanup_media(max_bytes=None):
 def _generate_room_id():
     while True:
         room_id = ''.join([str(random.randint(0, 9)) for _ in range(10)])
-        if not os.path.exists(os.path.join(ROOMS_DIR, room_id)):
+        if not Room.query.filter_by(room_id=room_id).first():
             return room_id
 
 
-def _read_config(room_id):
-    path = os.path.join(ROOMS_DIR, room_id, 'config.csv')
-    with open(path, 'r', newline='', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        return next(reader)
-
-
-def _read_messages(room_id):
-    path = os.path.join(ROOMS_DIR, room_id, 'messages.csv')
-    with open(path, 'r', newline='', encoding='utf-8') as f:
-        return list(csv.DictReader(f))
-
-
-def _read_users(room_id):
-    path = os.path.join(ROOMS_DIR, room_id, 'users.csv')
-    with open(path, 'r', newline='', encoding='utf-8') as f:
-        return list(csv.DictReader(f))
-
-
-def _is_user_in_room(room_id, login):
-    users = _read_users(room_id)
-    return any(u['login'] == login for u in users)
-
-
 def get_room_display_name(room_id):
-    try:
-        config = _read_config(room_id)
-        name = config.get('room_name', '').strip()
-        return name if name else room_id
-    except Exception:
-        return room_id
+    room = Room.query.filter_by(room_id=room_id).first()
+    if room and room.name:
+        return room.name
+    return room_id
 
 
 def _can_access_room(room_id):
-    config = _read_config(room_id)
-    if config['is_open'] == 'true':
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
+        return False
+    if room.is_open:
         return True
     if session.get('user_type') != 'registered':
         return False
-    return _is_user_in_room(room_id, session.get('login'))
+    return RoomMember.query.filter_by(room_id=room_id, login=session.get('login')).first() is not None
+
+
+def _track_room(room_id):
+    visited = session.get('visited_rooms', [])
+    if room_id in visited:
+        visited.remove(room_id)
+    visited.insert(0, room_id)
+    session['visited_rooms'] = visited
+    session.modified = True
+
+
+def _untrack_room(room_id):
+    visited = session.get('visited_rooms', [])
+    if room_id in visited:
+        visited.remove(room_id)
+    session['visited_rooms'] = visited
+    session.modified = True
+
+
+def _remove_member(room_id, login):
+    RoomMember.query.filter_by(room_id=room_id, login=login).delete()
+    db.session.commit()
 
 
 @rooms_bp.route('/room/join', methods=['POST'])
@@ -98,8 +114,7 @@ def join_room():
     room_id = request.form.get('room_id', '').strip()
     if not room_id.isdigit() or len(room_id) != 10:
         return render_template('index.html', error='Неверный формат ID: должно быть ровно 10 цифр.')
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    if not Room.query.filter_by(room_id=room_id).first():
         return render_template('index.html', error='Комната с таким ID не найдена.')
     return redirect(url_for('rooms.room', room_id=room_id))
 
@@ -111,68 +126,26 @@ def create_room():
 
     login = session['login']
     room_id = _generate_room_id()
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    os.makedirs(room_path)
+    now = datetime.utcnow()
 
-    now = datetime.utcnow().isoformat()
+    room = Room(room_id=room_id, name='', is_open=True, created_at=now, creator_login=login)
+    db.session.add(room)
 
-    with open(os.path.join(room_path, 'config.csv'), 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['room_id', 'is_open', 'created_at', 'creator_login', 'room_name'])
-        writer.writerow([room_id, 'true', now, login, ''])
+    member = RoomMember(room_id=room_id, login=login, joined_at=now, role='godfather')
+    db.session.add(member)
 
-    with open(os.path.join(room_path, 'messages.csv'), 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['author', 'timestamp', 'text', 'reply_to', 'media'])
+    db.session.commit()
 
-    os.makedirs(os.path.join(room_path, 'media'), exist_ok=True)
-
-    with open(os.path.join(room_path, 'users.csv'), 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['login', 'joined_at', 'role'])
-        writer.writerow([login, now, 'godfather'])
+    media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
+    os.makedirs(media_dir, exist_ok=True)
 
     return redirect(url_for('rooms.room', room_id=room_id))
 
 
-def _track_room(room_id):
-    visited = session.get('visited_rooms', [])
-    if room_id in visited:
-        visited.remove(room_id)
-    visited.insert(0, room_id)
-    session['visited_rooms'] = visited
-
-    if session.get('user_type') == 'registered':
-        from auth import save_user_rooms
-        save_user_rooms(session['login'], visited)
-
-
-def _untrack_room(room_id):
-    visited = session.get('visited_rooms', [])
-    if room_id in visited:
-        visited.remove(room_id)
-    session['visited_rooms'] = visited
-
-    if session.get('user_type') == 'registered':
-        from auth import save_user_rooms
-        save_user_rooms(session['login'], visited)
-
-
-def _remove_user_from_room(room_id, login):
-    users = _read_users(room_id)
-    users = [u for u in users if u['login'] != login]
-    users_path = os.path.join(ROOMS_DIR, room_id, 'users.csv')
-    with open(users_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['login', 'joined_at', 'role'])
-        for u in users:
-            writer.writerow([u['login'], u['joined_at'], u['role']])
-
-
 @rooms_bp.route('/room/<room_id>')
 def room(room_id):
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return redirect(url_for('index'))
 
     if not _can_access_room(room_id):
@@ -180,21 +153,20 @@ def room(room_id):
 
     _track_room(room_id)
 
-    config = _read_config(room_id)
-    messages = _read_messages(room_id)
-    return render_template('room.html', room_id=room_id, config=config, messages=messages)
+    messages = Message.query.filter_by(room_id=room_id).order_by(Message.id).all()
+    return render_template('room.html', room_id=room_id, config=room, messages=messages)
 
 
 @rooms_bp.route('/room/<room_id>/message/<int:msg_index>/edit', methods=['POST'])
 def edit_message(room_id, msg_index):
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return jsonify({'ok': False}), 404
 
     if not _can_access_room(room_id):
         return jsonify({'ok': False}), 403
 
-    messages = _read_messages(room_id)
+    messages = Message.query.filter_by(room_id=room_id).order_by(Message.id).all()
     if msg_index < 1 or msg_index > len(messages):
         return jsonify({'ok': False}), 404
 
@@ -205,23 +177,15 @@ def edit_message(room_id, msg_index):
     else:
         current_user = session.get('anon_id')
 
-    if msg['author'] != current_user:
+    if msg.author != current_user:
         return jsonify({'ok': False}), 403
 
     new_text = request.form.get('text', '').strip()
     if not new_text:
         return jsonify({'ok': False}), 400
 
-    messages[msg_index - 1]['text'] = new_text
-
-    fieldnames = ['author', 'timestamp', 'text', 'reply_to', 'media']
-    msg_path = os.path.join(room_path, 'messages.csv')
-    with open(msg_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
-        writer.writeheader()
-        for m in messages:
-            row = {fn: m.get(fn, '') for fn in fieldnames}
-            writer.writerow(row)
+    msg.text = new_text
+    db.session.commit()
 
     return jsonify({'ok': True, 'text': new_text})
 
@@ -229,8 +193,8 @@ def edit_message(room_id, msg_index):
 @rooms_bp.route('/room/<room_id>/messages/poll')
 def poll_messages(room_id):
     """Возвращает сообщения начиная с индекса after (1-based) в формате JSON."""
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return jsonify([]), 404
 
     if not _can_access_room(room_id):
@@ -239,7 +203,7 @@ def poll_messages(room_id):
     after = request.args.get('after', '0')
     after = int(after) if after.isdigit() else 0
 
-    messages = _read_messages(room_id)
+    messages = Message.query.filter_by(room_id=room_id).order_by(Message.id).all()
     total = len(messages)
 
     new_msgs = []
@@ -247,18 +211,18 @@ def poll_messages(room_id):
         msg = messages[i]
         entry = {
             'index': i + 1,
-            'author': msg['author'],
-            'timestamp': msg['timestamp'],
-            'text': msg['text'],
-            'reply_to': msg.get('reply_to', '').strip(),
-            'media': msg.get('media', '').strip(),
+            'author': msg.author,
+            'timestamp': msg.timestamp.isoformat(),
+            'text': msg.text,
+            'reply_to': str(msg.reply_to) if msg.reply_to else '',
+            'media': msg.media or '',
         }
         rt = entry['reply_to']
-        if rt and rt.isdigit():
+        if rt:
             ri = int(rt)
             if 0 < ri <= total:
-                entry['reply_author'] = messages[ri - 1]['author']
-                entry['reply_text'] = messages[ri - 1]['text'][:60]
+                entry['reply_author'] = messages[ri - 1].author
+                entry['reply_text'] = messages[ri - 1].text[:60]
         new_msgs.append(entry)
 
     return jsonify(new_msgs)
@@ -266,8 +230,8 @@ def poll_messages(room_id):
 
 @rooms_bp.route('/room/<room_id>/message', methods=['POST'])
 def post_message(room_id):
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return redirect(url_for('index'))
 
     if not _can_access_room(room_id):
@@ -278,18 +242,24 @@ def post_message(room_id):
     if not text and not media:
         return redirect(url_for('rooms.room', room_id=room_id))
 
-    reply_to = request.form.get('reply_to', '').strip()
+    reply_to_raw = request.form.get('reply_to', '').strip()
+    reply_to = int(reply_to_raw) if reply_to_raw.isdigit() else None
 
     if session.get('user_type') == 'registered':
         author = session['login']
     else:
         author = session.get('anon_id', 'Anon')
 
-    now = datetime.utcnow().isoformat()
-    msg_path = os.path.join(room_path, 'messages.csv')
-    with open(msg_path, 'a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow([author, now, text, reply_to, media])
+    msg = Message(
+        room_id=room_id,
+        author=author,
+        text=text,
+        timestamp=datetime.utcnow(),
+        reply_to=reply_to,
+        media=media or None,
+    )
+    db.session.add(msg)
+    db.session.commit()
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'ok': True})
@@ -299,8 +269,8 @@ def post_message(room_id):
 
 @rooms_bp.route('/room/<room_id>/upload', methods=['POST'])
 def upload_media(room_id):
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return jsonify({'ok': False, 'error': 'Room not found'}), 404
 
     if not _can_access_room(room_id):
@@ -310,7 +280,11 @@ def upload_media(room_id):
     if not file or not file.filename:
         return jsonify({'ok': False, 'error': 'No file'}), 400
 
-    media_dir = os.path.join(room_path, 'media')
+    content_type = (file.content_type or '').split(';')[0].strip()
+    if content_type and content_type != 'application/octet-stream' and content_type not in ALLOWED_MIMES:
+        return jsonify({'ok': False, 'error': f'Тип файла не разрешён: {content_type}'}), 415
+
+    media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
     os.makedirs(media_dir, exist_ok=True)
 
     original_name = file.filename.rsplit('/', 1)[-1].rsplit('\\', 1)[-1]
@@ -324,14 +298,14 @@ def upload_media(room_id):
 
 @rooms_bp.route('/room/<room_id>/media/<filename>')
 def serve_media(room_id, filename):
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return '', 404
 
     if not _can_access_room(room_id):
         return '', 403
 
-    media_dir = os.path.join(room_path, 'media')
+    media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
     return send_from_directory(media_dir, filename)
 
 
@@ -340,17 +314,15 @@ def leave_room(room_id):
     if session.get('user_type') != 'registered':
         return redirect(url_for('index'))
 
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return redirect(url_for('index'))
 
     login = session['login']
-    config = _read_config(room_id)
-
-    if config['creator_login'] == login:  # создатель не может покинуть комнату
+    if room.creator_login == login:
         return redirect(url_for('rooms.room', room_id=room_id))
 
-    _remove_user_from_room(room_id, login)
+    _remove_member(room_id, login)
     _untrack_room(room_id)
 
     return redirect(url_for('index'))
@@ -361,84 +333,68 @@ def delete_room(room_id):
     if session.get('user_type') != 'registered':
         return redirect(url_for('index'))
 
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return redirect(url_for('index'))
 
-    config = _read_config(room_id)
-    if config['creator_login'] != session.get('login'):
+    if room.creator_login != session.get('login'):
         return redirect(url_for('rooms.room', room_id=room_id))
 
-    from auth import load_user_rooms, save_user_rooms
-    users = _read_users(room_id)
-    for u in users:
-        user_rooms = load_user_rooms(u['login'])
-        if room_id in user_rooms:
-            user_rooms.remove(room_id)
-            save_user_rooms(u['login'], user_rooms)
+    room_path = os.path.join(ROOMS_DIR, room_id)
+    if os.path.isdir(room_path):
+        shutil.rmtree(room_path)
 
-    shutil.rmtree(room_path)
+    db.session.delete(room)
+    db.session.commit()
 
     _untrack_room(room_id)
-
     return redirect(url_for('index'))
 
 
 @rooms_bp.route('/room/<room_id>/manage/kick', methods=['POST'])
 def kick_user(room_id):
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return redirect(url_for('index'))
 
     if session.get('user_type') != 'registered':
         return redirect(url_for('rooms.room', room_id=room_id))
 
-    config = _read_config(room_id)
-    if config['creator_login'] != session.get('login'):
+    if room.creator_login != session.get('login'):
         return redirect(url_for('rooms.room', room_id=room_id))
 
     target = request.form.get('login', '').strip()
-    if target and target != config['creator_login']:  # нельзя кикнуть создателя
-        _remove_user_from_room(room_id, target)
-        from auth import load_user_rooms, save_user_rooms
-        user_rooms = load_user_rooms(target)
-        if room_id in user_rooms:
-            user_rooms.remove(room_id)
-            save_user_rooms(target, user_rooms)
+    if target and target != room.creator_login:
+        _remove_member(room_id, target)
 
     return redirect(url_for('rooms.manage_room', room_id=room_id))
 
 
 @rooms_bp.route('/room/<room_id>/manage', methods=['GET', 'POST'])
 def manage_room(room_id):
-    room_path = os.path.join(ROOMS_DIR, room_id)
-    if not os.path.isdir(room_path):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
         return redirect(url_for('index'))
 
     if session.get('user_type') != 'registered':
         return redirect(url_for('rooms.room', room_id=room_id))
 
-    config = _read_config(room_id)
-    if config['creator_login'] != session.get('login'):
+    if room.creator_login != session.get('login'):
         return redirect(url_for('rooms.room', room_id=room_id))
 
     if request.method == 'GET':
-        users = _read_users(room_id)
-        return render_template('manage.html', room_id=room_id, config=config, users=users)
+        members = RoomMember.query.filter_by(room_id=room_id).all()
+        return render_template('manage.html', room_id=room_id, config=room, users=members)
 
-    new_is_open = request.form.get('is_open', 'true')
-    new_name = request.form.get('room_name', '').strip()
-    config_path = os.path.join(room_path, 'config.csv')
-    with open(config_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['room_id', 'is_open', 'created_at', 'creator_login', 'room_name'])
-        writer.writerow([room_id, new_is_open, config['created_at'], config['creator_login'], new_name])
+    room.is_open = request.form.get('is_open', 'true') == 'true'
+    room.name = request.form.get('room_name', '').strip()
 
     add_user = request.form.get('add_user', '').strip()
-    if add_user and not _is_user_in_room(room_id, add_user):
-        users_path = os.path.join(room_path, 'users.csv')
-        with open(users_path, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow([add_user, datetime.utcnow().isoformat(), 'member'])
+    if add_user and not RoomMember.query.filter_by(room_id=room_id, login=add_user).first():
+        from models import User as UserModel
+        if UserModel.query.filter_by(login=add_user).first():
+            member = RoomMember(room_id=room_id, login=add_user, role='member')
+            db.session.add(member)
 
+    db.session.commit()
     return redirect(url_for('rooms.manage_room', room_id=room_id))
