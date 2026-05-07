@@ -1,10 +1,11 @@
 import os
 import uuid
 from datetime import datetime, timezone, timedelta
-from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory
+
+from flask import Flask, render_template, session, send_from_directory
 from flask_session import Session
-from auth import auth_bp
-from rooms import rooms_bp, get_room_display_name
+
+from extensions import db, login_manager, csrf
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', uuid.uuid4().hex)
@@ -13,11 +14,27 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 ** 3  # 5 GB
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = os.path.join(os.path.dirname(__file__), 'flask_session')
 app.config['SESSION_PERMANENT'] = False
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
+    'DATABASE_URL',
+    'sqlite:///' + os.path.join(os.path.dirname(__file__), 'app.db')
+)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['WTF_CSRF_TIME_LIMIT'] = None  # токен не истекает вместе с сессией
+
 Session(app)
+db.init_app(app)
+login_manager.init_app(app)
+csrf.init_app(app)
+
+from auth import auth_bp
+from rooms import rooms_bp, get_room_display_name
+from api import api_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
+app.register_blueprint(api_bp, url_prefix='/api')
 
+csrf.exempt(api_bp)
 
 MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
           'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
@@ -25,14 +42,23 @@ MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
 MSK = timezone(timedelta(hours=3))
 
 
+@login_manager.user_loader
+def load_user(login):
+    from models import User
+    return User.query.filter_by(login=login).first()
+
+
 @app.template_filter('ts')
 def format_ts(value):
     try:
-        dt = datetime.fromisoformat(value)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc).astimezone(MSK)
+        if isinstance(value, datetime):
+            dt = value.replace(tzinfo=timezone.utc).astimezone(MSK)
+        else:
+            dt = datetime.fromisoformat(str(value))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc).astimezone(MSK)
     except (ValueError, TypeError):
-        return value
+        return str(value) if value else ''
     today_msk = datetime.now(MSK).date()
     d = dt.date()
     time_str = dt.strftime('%H:%M')
@@ -67,7 +93,18 @@ def index():
     return render_template('index.html')
 
 
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('404.html'), 404
+
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template('500.html'), 500
+
+
 if __name__ == '__main__':
     os.makedirs('rooms', exist_ok=True)
-    os.makedirs('users', exist_ok=True)
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)

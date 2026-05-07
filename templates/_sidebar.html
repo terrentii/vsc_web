@@ -2,6 +2,7 @@
     <div class="sidebar-header">Комнаты</div>
     <div class="sidebar-search">
         <form action="{{ url_for('rooms.join_room') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="text" name="room_id" placeholder="Поиск по ID комнаты..." maxlength="10">
             <button class="btn" type="submit" style="width: 100%; margin-top: 6px;">Войти</button>
         </form>
@@ -17,6 +18,7 @@
     {% if session.get('user_type') == 'registered' %}
     <div class="sidebar-footer">
         <form action="{{ url_for('rooms.create_room') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-primary" type="submit" style="width: 100%;">Создать комнату</button>
         </form>
     </div>

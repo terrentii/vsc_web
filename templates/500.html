@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}500 — Ошибка сервера{% endblock %}
+
+{% block content %}
+<div class="app-body">
+    <div class="error-page">
+        <h1>500</h1>
+        <p>Внутренняя ошибка сервера. Попробуйте позже.</p>
+        <a href="{{ url_for('index') }}" class="btn" style="margin-top: 8px;">На главную</a>
+    </div>
+</div>
+{% endblock %}

@@ -1,12 +1,11 @@
-from flask import Flask
+"""
+WSGI entry point.
+Запуск production-сервером:
+    gunicorn server:application
+или через Procfile:
+    gunicorn app:app
+"""
+from app import app as application
 
-app = Flask(__name__)
-
-
-@app.route("/")
-def index():
-    return "VSC Web"
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    application.run()

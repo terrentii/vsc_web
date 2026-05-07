@@ -8,9 +8,9 @@
 
     <div class="chat-panel">
         <div class="chat-header">
-            {% set display_name = config.room_name if config.room_name else room_id %}
+            {% set display_name = config.name if config.name else room_id %}
             <span>{{ display_name }}</span>
-            {% if config.room_name %}
+            {% if config.name %}
                 <span style="margin-left: 8px; font-size: 11px; color: #999; font-weight: normal;">{{ room_id }}</span>
             {% endif %}
             {% if session.get('user_type') == 'registered' %}
@@ -18,7 +18,8 @@
                     <a href="{{ url_for('rooms.manage_room', room_id=room_id) }}" class="btn" style="margin-left: 12px; padding: 2px 10px; font-size: 12px;">Управление</a>
                 {% else %}
                     <form action="{{ url_for('rooms.leave_room', room_id=room_id) }}" method="post" style="display: inline; margin-left: 12px;">
-                        <button class="btn" type="submit" style="padding: 2px 10px; font-size: 12px; color: #da4453; border-color: #da4453;">Покинуть</button>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-danger" type="submit" style="padding: 2px 10px; font-size: 12px;">Покинуть</button>
                     </form>
                 {% endif %}
             {% endif %}
@@ -44,9 +45,8 @@
                                 data-author="{{ msg.author }}">Ответить</button>
                         </span>
                     </div>
-                    {% set rt = msg.get('reply_to', '') | trim %}
-                    {% if rt and rt.isdigit() %}
-                        {% set ri = rt | int %}
+                    {% if msg.reply_to %}
+                        {% set ri = msg.reply_to %}
                         {% if ri > 0 and ri <= messages | length %}
                         <a href="#msg-{{ ri }}" class="msg-reply-link">
                             ответ на {{ messages[ri - 1].author }}: {{ messages[ri - 1].text | truncate(60) }}
@@ -54,7 +54,7 @@
                         {% endif %}
                     {% endif %}
                     <div class="msg-text">{{ msg.text }}</div>
-                    {% set media_file = msg.get('media', '') | trim %}
+                    {% set media_file = msg.media or '' %}
                     {% if media_file %}
                     <div class="msg-media">
                         {% set ml = media_file.lower() %}
@@ -81,6 +81,7 @@
         </div>
 
         <form id="msg-form" action="{{ url_for('rooms.post_message', room_id=room_id) }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="reply_to" id="reply_to" value="">
             <input type="hidden" name="media" id="media-filename" value="">
             <input type="file" id="file-input" style="display:none">
@@ -125,9 +126,10 @@
     const messagesEl = document.getElementById('messages');
     const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
     let msgCount = {{ messages | length }};
-    const ROOM_NAME = {{ (config.room_name if config.room_name else room_id) | tojson }};
+    const ROOM_NAME = {{ (config.name if config.name else room_id) | tojson }};
     const CURRENT_USER = {{ ((session.get('login') or session.get('anon_id')) or '') | tojson }};
     const ROOM_ID = {{ room_id | tojson }};
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
     let swReg = null;
     if ('serviceWorker' in navigator) {
@@ -261,7 +263,11 @@
                     if (!newText) return;
                     fetch('/room/' + ROOM_ID + '/message/' + btn.dataset.index + '/edit', {
                         method: 'POST',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': CSRF_TOKEN
+                        },
                         body: 'text=' + encodeURIComponent(newText)
                     }).then(r => r.json()).then(data => {
                         if (data.ok) {
@@ -335,6 +341,7 @@
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/room/' + ROOM_ID + '/upload');
+        xhr.setRequestHeader('X-CSRFToken', CSRF_TOKEN);
         xhr.upload.addEventListener('progress', function(e) {
             if (e.lengthComputable) {
                 uploadProgressFill.style.width = Math.round(e.loaded / e.total * 100) + '%';
@@ -386,7 +393,10 @@
         const formData = new FormData(msgForm);
         fetch(msgForm.action, {
             method: 'POST',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': CSRF_TOKEN
+            },
             body: formData
         }).then(() => {
             textInput.value = '';
