@@ -46,15 +46,6 @@
                     <div class="msg-header">
                         <span class="msg-author{{ ' is-me' if is_me else '' }}{{ ' is-anon' if is_anon else '' }}{{ ' is-founder' if is_founder else '' }}">{{ msg.author }}</span>
                         <span class="msg-time">{{ msg.timestamp | ts }}</span>
-                        <span class="msg-actions">
-                            {% if is_me %}
-                            <button type="button" class="edit-btn" data-index="{{ loop.index }}">Изм.</button>
-                            <button type="button" class="del-btn" data-index="{{ loop.index }}">Удалить</button>
-                            {% endif %}
-                            <button type="button" class="reply-btn"
-                                    data-index="{{ loop.index }}"
-                                    data-author="{{ msg.author }}">Ответить</button>
-                        </span>
                     </div>
                     {% if msg.reply_to %}
                         {% set ri = msg.reply_to %}
@@ -84,6 +75,15 @@
                         {% endif %}
                     </div>
                     {% endif %}
+                    <span class="msg-actions">
+                        {% if is_me %}
+                        <button type="button" class="edit-btn" data-index="{{ loop.index }}">Изм.</button>
+                        <button type="button" class="del-btn" data-index="{{ loop.index }}">Удалить</button>
+                        {% endif %}
+                        <button type="button" class="reply-btn"
+                                data-index="{{ loop.index }}"
+                                data-author="{{ msg.author }}">Ответить</button>
+                    </span>
                 </div>
                 {% endfor %}
             {% else %}
@@ -240,13 +240,13 @@
             '<div class="msg-header">' +
                 '<span class="' + authorClass + '">' + esc(m.author) + '</span>' +
                 '<span class="msg-time">' + formatTs(m.timestamp) + '</span>' +
-                '<span class="msg-actions">' + editBtn +
-                    '<button type="button" class="reply-btn" data-index="' + m.index + '" data-author="' + esc(m.author) + '">Ответить</button>' +
-                '</span>' +
             '</div>' +
             replyHtml +
             '<div class="msg-text">' + esc(m.text) + '</div>' +
             mediaHtml(m.media) +
+            '<span class="msg-actions">' + editBtn +
+                '<button type="button" class="reply-btn" data-index="' + m.index + '" data-author="' + esc(m.author) + '">Ответить</button>' +
+            '</span>' +
             '</div>';
     }
 
