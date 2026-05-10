@@ -1,29 +1,66 @@
 {% extends "base.html" %}
 {% block title %}Вход — МЫС Web{% endblock %}
 
+{% block menubar_route %}
+<span class="slash">/</span><span>login</span>
+{% endblock %}
+
 {% block content %}
-<div class="centered-container">
-    <h2>Вход</h2>
+<div class="auth-page">
+    <div class="auth-shell">
+        <aside class="auth-aside">
+            <div>
+                <div class="auth-aside-tag">Вход / authenticate</div>
+                <div class="auth-aside-title">
+                    Не дай миру<br>увидеть<br><span class="accent">лишнее.</span>
+                </div>
+                <p class="auth-aside-body">
+                    Учётная запись нужна, чтобы создавать <strong>комнаты</strong> и быть в них прародителем.
+                    Для разговора в чужих открытых комнатах вход не обязателен.
+                </p>
+            </div>
+            <img src="{{ url_for('static', filename='vsc-logo-dark.png') }}"
+                 alt="" class="auth-aside-logo">
+            <div class="auth-aside-meta">
+                <span>Flask · CSV · SW</span>
+                <span>vsc_web/auth</span>
+            </div>
+        </aside>
 
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
+        <main class="auth-card">
+            <div class="auth-card-eyebrow">session.login</div>
+            <h2 class="auth-card-title">
+                Вход
+                <span class="step">01 / 01</span>
+            </h2>
 
-    <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="form-group">
-            <label for="login">Логин</label>
-            <input type="text" id="login" name="login" required autocomplete="username">
-        </div>
-        <div class="form-group">
-            <label for="password">Пароль</label>
-            <input type="password" id="password" name="password" required autocomplete="current-password">
-        </div>
-        <button class="btn btn-primary" type="submit">Войти</button>
-    </form>
+            {% if error %}
+            <div class="error-msg">{{ error }}</div>
+            {% endif %}
 
-    <p style="margin-top: 12px; font-size: 12px; color: #666;">
-        Нет аккаунта? <a href="{{ url_for('auth.register') }}">Регистрация</a>
-    </p>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="login">Логин <span class="hint">3–32 символа</span></label>
+                    <input type="text" id="login" name="login" required
+                           minlength="3" maxlength="32" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Пароль <span class="hint">мин. 4</span></label>
+                    <input type="password" id="password" name="password" required
+                           minlength="4" autocomplete="current-password">
+                </div>
+                <button class="btn btn-primary btn-block" type="submit" style="margin-top:6px;">
+                    Войти →
+                </button>
+            </form>
+
+            <div class="auth-switch">
+                Нет аккаунта? <a href="{{ url_for('auth.register') }}">Регистрация</a>
+            </div>
+        </main>
+    </div>
 </div>
 {% endblock %}
+
+{% block statusbar_left %}Готово · ожидание входа{% endblock %}

@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Комната {{ room_id }} — МЫС Web{% endblock %}
 
+{% block menubar_route %}
+<span class="slash">/</span><span>rooms</span>
+<span class="slash">/</span><span>{{ room_id }}</span>
+{% endblock %}
+
 {% block content %}
 <div class="messenger">
     {% set current_room = room_id %}
@@ -9,17 +14,22 @@
     <div class="chat-panel">
         <div class="chat-header">
             {% set display_name = config.name if config.name else room_id %}
-            <span>{{ display_name }}</span>
+            <span class="chat-header-name">{{ display_name }}</span>
             {% if config.name %}
-                <span style="margin-left: 8px; font-size: 11px; color: #999; font-weight: normal;">{{ room_id }}</span>
+                <span class="chat-header-id">{{ room_id }}</span>
             {% endif %}
+            <span class="chat-header-spacer"></span>
+            <span class="chat-header-pop">{{ 'Открытая' if config.is_open else 'Закрытая' }}</span>
             {% if session.get('user_type') == 'registered' %}
                 {% if config.creator_login == session.get('login') %}
-                    <a href="{{ url_for('rooms.manage_room', room_id=room_id) }}" class="btn" style="margin-left: 12px; padding: 2px 10px; font-size: 12px;">Управление</a>
+                    <a href="{{ url_for('rooms.manage_room', room_id=room_id) }}" class="btn btn-sm">Управление</a>
                 {% else %}
-                    <form action="{{ url_for('rooms.leave_room', room_id=room_id) }}" method="post" style="display: inline; margin-left: 12px;">
+                    <form action="{{ url_for('rooms.leave_room', room_id=room_id) }}" method="post" style="display:inline;">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button class="btn btn-danger" type="submit" style="padding: 2px 10px; font-size: 12px;">Покинуть</button>
+                        <button class="btn btn-sm" type="submit"
+                                style="border-color:var(--warn);color:var(--warn);box-shadow:3px 3px 0 0 var(--warn);">
+                            Покинуть
+                        </button>
                     </form>
                 {% endif %}
             {% endif %}
@@ -29,27 +39,28 @@
             {% if messages %}
                 {% for msg in messages %}
                 {% set current_user = session.get('login') or session.get('anon_id') %}
+                {% set is_me = (msg.author == current_user) %}
+                {% set is_anon = msg.author and msg.author.startswith('Anon') %}
+                {% set is_founder = (msg.author == config.creator_login) %}
                 <div class="msg" id="msg-{{ loop.index }}">
                     <div class="msg-header">
-                        <span>
-                            <span class="msg-author">{{ msg.author }}</span>
-                            <span class="msg-time">{{ msg.timestamp | ts }}</span>
-                        </span>
+                        <span class="msg-author{{ ' is-me' if is_me else '' }}{{ ' is-anon' if is_anon else '' }}{{ ' is-founder' if is_founder else '' }}">{{ msg.author }}</span>
+                        <span class="msg-time">{{ msg.timestamp | ts }}</span>
                         <span class="msg-actions">
-                            {% if msg.author == current_user %}
-                            <button type="button" class="edit-btn"
-                                data-index="{{ loop.index }}">Изменить</button>
+                            {% if is_me %}
+                            <button type="button" class="edit-btn" data-index="{{ loop.index }}">Изм.</button>
+                            <button type="button" class="del-btn" data-index="{{ loop.index }}">Удалить</button>
                             {% endif %}
                             <button type="button" class="reply-btn"
-                                data-index="{{ loop.index }}"
-                                data-author="{{ msg.author }}">Ответить</button>
+                                    data-index="{{ loop.index }}"
+                                    data-author="{{ msg.author }}">Ответить</button>
                         </span>
                     </div>
                     {% if msg.reply_to %}
                         {% set ri = msg.reply_to %}
                         {% if ri > 0 and ri <= messages | length %}
                         <a href="#msg-{{ ri }}" class="msg-reply-link">
-                            ответ на {{ messages[ri - 1].author }}: {{ messages[ri - 1].text | truncate(60) }}
+                            <span class="arrow">↳</span>{{ messages[ri - 1].author }}: {{ messages[ri - 1].text | truncate(60) }}
                         </a>
                         {% endif %}
                     {% endif %}
@@ -60,15 +71,15 @@
                         {% set ml = media_file.lower() %}
                         {% if ml.endswith('.png') or ml.endswith('.jpg') or ml.endswith('.jpeg') or ml.endswith('.gif') or ml.endswith('.webp') or ml.endswith('.svg') %}
                             <a href="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}" target="_blank">
-                                <img src="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}" alt="media" loading="lazy">
+                                <img class="msg-media-img" src="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}" alt="media" loading="lazy">
                             </a>
                         {% elif ml.endswith('.mp4') or ml.endswith('.webm') or ml.endswith('.mov') %}
-                            <video controls preload="metadata" style="max-width:320px; border-radius:10px;">
+                            <video controls preload="metadata" style="max-width:320px;border:1.5px solid var(--mys-ink);">
                                 <source src="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}">
                             </video>
                         {% else %}
                             <a class="msg-media-link" href="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}" download>
-                                📎 {{ media_file.split('_', 1)[1] if '_' in media_file else media_file }}
+                                <span class="clip">📎</span>{{ media_file.split('_', 1)[1] if '_' in media_file else media_file }}
                             </a>
                         {% endif %}
                     </div>
@@ -76,7 +87,9 @@
                 </div>
                 {% endfor %}
             {% else %}
-                <p style="color: #999; text-align: center; margin-top: 20px;">Сообщений пока нет.</p>
+                <div id="no-msgs" style="padding:32px 0;text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase;">
+                    Сообщений пока нет
+                </div>
             {% endif %}
         </div>
 
@@ -85,14 +98,16 @@
             <input type="hidden" name="reply_to" id="reply_to" value="">
             <input type="hidden" name="media" id="media-filename" value="">
             <input type="file" id="file-input" style="display:none">
-            <div class="reply-preview" id="reply-preview">
-                <span id="reply-preview-text"></span>
-                <button type="button" class="reply-cancel" id="reply-cancel">&times;</button>
+
+            <div class="reply-preview" id="reply-preview" style="display:none;">
+                <span class="reply-preview-label">↳ Reply</span>
+                <span class="reply-preview-text" id="reply-preview-text"></span>
+                <button type="button" class="reply-cancel" id="reply-cancel">×</button>
             </div>
-            <div class="upload-preview" id="upload-preview">
-                <span>📎</span>
+            <div class="upload-preview" id="upload-preview" style="display:none;">
+                <span class="upload-preview-label">📎 Прикреплено</span>
                 <span class="upload-preview-name" id="upload-preview-name"></span>
-                <button type="button" class="upload-preview-cancel" id="upload-cancel">&times;</button>
+                <button type="button" class="upload-preview-cancel" id="upload-cancel">×</button>
             </div>
             <div class="upload-progress" id="upload-progress">
                 <div class="upload-progress-bar">
@@ -101,26 +116,37 @@
             </div>
             <div class="chat-input">
                 <button type="button" class="attach-btn" id="attach-btn" title="Прикрепить файл">📎</button>
-                <input type="text" name="text" placeholder="Сообщение или файл..." autocomplete="off">
-                <button class="btn btn-primary" type="submit">Отправить</button>
+                <input class="chat-input-text" type="text" name="text"
+                       placeholder="Сообщение или файл…" autocomplete="off">
+                <button class="btn btn-primary" type="submit">Отправить ↵</button>
             </div>
         </form>
-    </div>
-</div>
 
-{% if session.get('user_type') == 'anon' %}
-<div class="disclaimer-overlay" id="disclaimer-overlay">
-    <div class="disclaimer-box">
-        <div class="disclaimer-title">⚠ Внимание</div>
-        <div class="disclaimer-body">
-            <p>Вы входите в чат как <strong>анонимный пользователь</strong>.</p>
-            <p>Несмотря на отсутствие регистрации, ваши сообщения могут содержать косвенные признаки, по которым вас можно <strong>деанонимизировать</strong>: стиль письма, упоминание личных деталей, IP-адрес и другие технические метаданные.</p>
-            <p>Будьте осторожны в своих высказываниях.</p>
+        {% if session.get('user_type') == 'anon' %}
+        <div class="disclaimer-overlay" id="disclaimer-overlay">
+            <div class="disclaimer-box">
+                <div class="disclaimer-stripe">
+                    <span>⚠ Внимание</span>
+                    <span class="code">DEANON-RISK</span>
+                </div>
+                <div class="disclaimer-title">Анонимный режим</div>
+                <div class="disclaimer-sub">Сессия Anon · log only</div>
+                <div class="disclaimer-body">
+                    <p>Вы входите в чат как <strong>анонимный пользователь</strong>.</p>
+                    <p>Несмотря на отсутствие регистрации, ваши сообщения могут содержать косвенные признаки, по которым вас можно <strong class="danger">деанонимизировать</strong>:</p>
+                    <ul class="disclaimer-list">
+                        <li>стиль письма и характерные обороты</li>
+                        <li>упоминание личных деталей</li>
+                        <li>IP-адрес и технические метаданные</li>
+                    </ul>
+                    <p>Будьте осторожны в своих высказываниях.</p>
+                </div>
+                <button class="btn btn-primary disclaimer-ok" onclick="closeDisclaimer()">Понятно, продолжить</button>
+            </div>
         </div>
-        <button class="btn btn-primary disclaimer-ok" onclick="closeDisclaimer()">Понятно</button>
+        {% endif %}
     </div>
 </div>
-{% endif %}
 
 <script>
     const messagesEl = document.getElementById('messages');
@@ -128,6 +154,7 @@
     let msgCount = {{ messages | length }};
     const ROOM_NAME = {{ (config.name if config.name else room_id) | tojson }};
     const CURRENT_USER = {{ ((session.get('login') or session.get('anon_id')) or '') | tojson }};
+    const CREATOR = {{ (config.creator_login or '') | tojson }};
     const ROOM_ID = {{ room_id | tojson }};
     const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
@@ -156,7 +183,7 @@
     }
     function formatTs(iso) {
         try {
-            const dt = new Date(iso + 'Z'); // UTC
+            const dt = new Date(iso + 'Z');
             const d = mskParts(dt);
             const n = mskParts(new Date());
             const time = d.hour + ':' + d.minute;
@@ -183,32 +210,39 @@
         const url = '/room/' + ROOM_ID + '/media/' + encodeURIComponent(media);
         const displayName = media.indexOf('_') > -1 ? media.substring(media.indexOf('_') + 1) : media;
         if (IMAGE_EXTS.includes(ext)) {
-            return '<div class="msg-media"><a href="' + esc(url) + '" target="_blank"><img src="' + esc(url) + '" alt="media" loading="lazy"></a></div>';
+            return '<div class="msg-media"><a href="' + esc(url) + '" target="_blank"><img class="msg-media-img" src="' + esc(url) + '" alt="media" loading="lazy"></a></div>';
         }
         if (VIDEO_EXTS.includes(ext)) {
-            return '<div class="msg-media"><video controls preload="metadata" style="max-width:320px;border-radius:10px;"><source src="' + esc(url) + '"></video></div>';
+            return '<div class="msg-media"><video controls preload="metadata" style="max-width:320px;border:1.5px solid var(--mys-ink);"><source src="' + esc(url) + '"></video></div>';
         }
-        return '<div class="msg-media"><a class="msg-media-link" href="' + esc(url) + '" download>📎 ' + esc(displayName) + '</a></div>';
+        return '<div class="msg-media"><a class="msg-media-link" href="' + esc(url) + '" download><span class="clip">📎</span>' + esc(displayName) + '</a></div>';
     }
 
     function renderMsg(m) {
+        const isMe = m.author === CURRENT_USER;
+        const isAnon = m.author && m.author.startsWith('Anon');
+        const isFounder = m.author === CREATOR;
+        let authorClass = 'msg-author';
+        if (isMe) authorClass += ' is-me';
+        if (isAnon) authorClass += ' is-anon';
+        if (isFounder) authorClass += ' is-founder';
+
         let replyHtml = '';
         if (m.reply_to && m.reply_author) {
-            replyHtml = '<a href="#msg-' + esc(m.reply_to) + '" class="msg-reply-link">' +
-                'ответ на ' + esc(m.reply_author) + ': ' + esc(m.reply_text) + '</a>';
+            replyHtml = '<a href="#msg-' + esc(String(m.reply_to)) + '" class="msg-reply-link">' +
+                '<span class="arrow">↳</span>' + esc(m.reply_author) + ': ' + esc(m.reply_text) + '</a>';
         }
-        const editBtn = (m.author === CURRENT_USER)
-            ? '<button type="button" class="edit-btn" data-index="' + m.index + '">Изменить</button>'
+        const editBtn = isMe
+            ? '<button type="button" class="edit-btn" data-index="' + m.index + '">Изм.</button>' +
+              '<button type="button" class="del-btn" data-index="' + m.index + '">Удалить</button>'
             : '';
         return '<div class="msg" id="msg-' + m.index + '">' +
-            '<div class="msg-header"><span>' +
-                '<span class="msg-author">' + esc(m.author) + '</span>' +
+            '<div class="msg-header">' +
+                '<span class="' + authorClass + '">' + esc(m.author) + '</span>' +
                 '<span class="msg-time">' + formatTs(m.timestamp) + '</span>' +
-            '</span>' +
-            '<span class="msg-actions">' +
-                editBtn +
-                '<button type="button" class="reply-btn" data-index="' + m.index + '" data-author="' + esc(m.author) + '">Ответить</button>' +
-            '</span>' +
+                '<span class="msg-actions">' + editBtn +
+                    '<button type="button" class="reply-btn" data-index="' + m.index + '" data-author="' + esc(m.author) + '">Ответить</button>' +
+                '</span>' +
             '</div>' +
             replyHtml +
             '<div class="msg-text">' + esc(m.text) + '</div>' +
@@ -220,9 +254,9 @@
         el.querySelectorAll('.reply-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.getElementById('reply_to').value = btn.dataset.index;
-                document.getElementById('reply-preview-text').textContent = 'Ответ на ' + btn.dataset.author;
+                document.getElementById('reply-preview-text').textContent = 'в ответ на ' + btn.dataset.author;
                 document.getElementById('reply-preview').style.display = 'flex';
-                document.querySelector('.chat-input input[name="text"]').focus();
+                document.querySelector('.chat-input-text').focus();
             });
         });
     }
@@ -235,29 +269,20 @@
                 const msgEl = document.getElementById('msg-' + btn.dataset.index);
                 const textEl = msgEl.querySelector('.msg-text');
                 if (msgEl.querySelector('.edit-input')) return;
-
                 const original = textEl.textContent;
                 textEl.style.display = 'none';
-
                 const wrap = document.createElement('div');
                 wrap.className = 'edit-input';
+                wrap.style.cssText = 'display:flex;gap:6px;align-items:center;margin-top:4px;';
                 wrap.innerHTML =
-                    '<input type="text" value="' + esc(original) + '" style="flex:1; padding:6px 12px; border:1px solid #3daee9; border-radius:999px; font-size:14px; outline:none;">' +
-                    '<button class="btn btn-primary" style="padding:5px 12px; font-size:13px;">Сохранить</button>' +
-                    '<button class="btn edit-cancel" style="padding:5px 10px; font-size:13px;">Отмена</button>';
-                wrap.style.cssText = 'display:flex; gap:6px; align-items:center; margin-top:4px;';
+                    '<input type="text" value="' + esc(original) + '" style="flex:1;padding:8px 12px;border:1.5px solid var(--mys-ink);font-size:13px;outline:none;">' +
+                    '<button class="btn btn-primary btn-sm">Сохранить</button>' +
+                    '<button class="btn btn-sm edit-cancel">Отмена</button>';
                 textEl.insertAdjacentElement('afterend', wrap);
-
                 const input = wrap.querySelector('input');
-                input.focus();
-                input.setSelectionRange(input.value.length, input.value.length);
-
-                const cancel = () => {
-                    wrap.remove();
-                    textEl.style.display = '';
-                };
+                input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+                const cancel = () => { wrap.remove(); textEl.style.display = ''; };
                 wrap.querySelector('.edit-cancel').addEventListener('click', cancel);
-
                 const save = () => {
                     const newText = input.value.trim();
                     if (!newText) return;
@@ -270,11 +295,7 @@
                         },
                         body: 'text=' + encodeURIComponent(newText)
                     }).then(r => r.json()).then(data => {
-                        if (data.ok) {
-                            textEl.textContent = data.text;
-                            wrap.remove();
-                            textEl.style.display = '';
-                        }
+                        if (data.ok) { textEl.textContent = data.text; wrap.remove(); textEl.style.display = ''; }
                     });
                 };
                 wrap.querySelector('.btn.btn-primary').addEventListener('click', save);
@@ -286,9 +307,29 @@
         });
     }
 
-    function scrollBottom() {
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+    function bindDelete(el) {
+        el.querySelectorAll('.del-btn').forEach(btn => {
+            if (btn._delBound) return;
+            btn._delBound = true;
+            btn.addEventListener('click', () => {
+                if (!confirm('Удалить это сообщение?')) return;
+                fetch('/room/' + ROOM_ID + '/message/' + btn.dataset.index + '/delete', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': CSRF_TOKEN
+                    }
+                }).then(r => r.json()).then(data => {
+                    if (data.ok) {
+                        const msgEl = document.getElementById('msg-' + btn.dataset.index);
+                        if (msgEl) msgEl.remove();
+                    }
+                });
+            });
+        });
     }
+
+    function scrollBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
     scrollBottom();
 
     const POLL_URL = '{{ url_for("rooms.poll_messages", room_id=room_id) }}';
@@ -297,10 +338,8 @@
             .then(r => r.ok ? r.json() : [])
             .then(msgs => {
                 if (!msgs.length) return;
-                const placeholder = messagesEl.querySelector('p[style]');
-                if (placeholder && placeholder.textContent.includes('Сообщений пока нет')) {
-                    placeholder.remove();
-                }
+                const noMsgs = document.getElementById('no-msgs');
+                if (noMsgs) noMsgs.remove();
                 const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
                 msgs.forEach(m => {
                     messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
@@ -309,13 +348,14 @@
                 });
                 bindReply(messagesEl);
                 bindEdit(messagesEl);
+                bindDelete(messagesEl);
                 if (wasAtBottom) scrollBottom();
             })
             .catch(() => {});
     }, 3000);
 
     const msgForm = document.getElementById('msg-form');
-    const textInput = msgForm.querySelector('input[name="text"]');
+    const textInput = msgForm.querySelector('.chat-input-text');
     const fileInput = document.getElementById('file-input');
     const attachBtn = document.getElementById('attach-btn');
     const mediaFilename = document.getElementById('media-filename');
@@ -329,16 +369,13 @@
     fileInput.addEventListener('change', function() {
         const file = fileInput.files[0];
         if (!file) return;
-
         uploadPreviewName.textContent = file.name;
         uploadPreview.style.display = 'flex';
         uploadProgress.style.display = 'block';
         uploadProgressFill.style.width = '0%';
         attachBtn.classList.add('has-file');
-
         const fd = new FormData();
         fd.append('file', file);
-
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/room/' + ROOM_ID + '/upload');
         xhr.setRequestHeader('X-CSRFToken', CSRF_TOKEN);
@@ -351,30 +388,19 @@
             uploadProgress.style.display = 'none';
             try {
                 const data = JSON.parse(xhr.responseText);
-                if (data.ok) {
-                    mediaFilename.value = data.filename;
-                } else {
-                    clearUpload();
-                    alert(data.error || 'Ошибка загрузки');
-                }
-            } catch(e) {
-                clearUpload();
-                alert('Ошибка загрузки');
-            }
+                if (data.ok) { mediaFilename.value = data.filename; }
+                else { clearUpload(); alert(data.error || 'Ошибка загрузки'); }
+            } catch(e) { clearUpload(); alert('Ошибка загрузки'); }
         });
         xhr.addEventListener('error', function() {
-            uploadProgress.style.display = 'none';
-            clearUpload();
-            alert('Ошибка загрузки');
+            uploadProgress.style.display = 'none'; clearUpload(); alert('Ошибка загрузки');
         });
         xhr.send(fd);
     });
 
     function clearUpload() {
-        fileInput.value = '';
-        mediaFilename.value = '';
-        uploadPreview.style.display = 'none';
-        uploadProgress.style.display = 'none';
+        fileInput.value = ''; mediaFilename.value = '';
+        uploadPreview.style.display = 'none'; uploadProgress.style.display = 'none';
         attachBtn.classList.remove('has-file');
     }
 
@@ -385,48 +411,41 @@
         const text = textInput.value.trim();
         const media = mediaFilename.value;
         if (!text && !media) return;
-
         if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission();
         }
-
         const formData = new FormData(msgForm);
         fetch(msgForm.action, {
             method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRFToken': CSRF_TOKEN
-            },
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': CSRF_TOKEN },
             body: formData
         }).then(() => {
             textInput.value = '';
             document.getElementById('reply_to').value = '';
             document.getElementById('reply-preview').style.display = 'none';
             clearUpload();
-        }).catch(() => {
-            msgForm.submit();
-        });
+        }).catch(() => { msgForm.submit(); });
     });
 
     function closeDisclaimer() {
-        document.getElementById('disclaimer-overlay').style.display = 'none';
+        const overlay = document.getElementById('disclaimer-overlay');
+        if (overlay) overlay.style.display = 'none';
         sessionStorage.setItem('anon_disclaimer_shown', '1');
     }
-    const overlay = document.getElementById('disclaimer-overlay');
-    if (overlay) {
-        if (sessionStorage.getItem('anon_disclaimer_shown')) {
-            overlay.style.display = 'none';
-        }
+    const discOverlay = document.getElementById('disclaimer-overlay');
+    if (discOverlay && sessionStorage.getItem('anon_disclaimer_shown')) {
+        discOverlay.style.display = 'none';
     }
-
-    bindReply(messagesEl);
-    bindEdit(messagesEl);
 
     document.getElementById('reply-cancel').addEventListener('click', () => {
         document.getElementById('reply_to').value = '';
         document.getElementById('reply-preview').style.display = 'none';
     });
+
+    bindReply(messagesEl);
+    bindEdit(messagesEl);
+    bindDelete(messagesEl);
 </script>
 {% endblock %}
 
-{% block statusbar %}Комната {{ room_id }}{% endblock %}
+{% block statusbar_left %}Комната {{ room_id }} · {{ messages | length }} сообщ.{% endblock %}

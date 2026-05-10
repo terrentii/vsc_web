@@ -1,12 +1,32 @@
 {% extends "base.html" %}
 {% block title %}500 — Ошибка сервера{% endblock %}
 
+{% block menubar_route %}
+<span class="slash">/</span><span>__500</span>
+{% endblock %}
+
 {% block content %}
-<div class="app-body">
-    <div class="error-page">
-        <h1>500</h1>
-        <p>Внутренняя ошибка сервера. Попробуйте позже.</p>
-        <a href="{{ url_for('index') }}" class="btn" style="margin-top: 8px;">На главную</a>
+<div class="error-page">
+    <div class="error-card danger">
+        <div class="error-stripe danger">
+            <span>500 server error</span>
+            <span>vsc_web · errors</span>
+        </div>
+        <div class="error-code">
+            <span class="accent">500</span>
+            <span class="marker">fatal</span>
+        </div>
+        <div class="error-title">Внутренняя ошибка</div>
+        <p class="error-sub">
+            Что-то пошло не так на сервере. Сообщения сохраняются по мере отправки —
+            повторите запрос через минуту.
+        </p>
+        <div class="error-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">На главную</a>
+            <button class="btn btn-ghost" onclick="history.back()">Назад</button>
+        </div>
     </div>
 </div>
 {% endblock %}
+
+{% block statusbar_left %}Ошибка 500 · внутренняя{% endblock %}
