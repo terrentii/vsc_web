@@ -1,33 +1,72 @@
 {% extends "base.html" %}
 {% block title %}Регистрация — МЫС Web{% endblock %}
 
+{% block menubar_route %}
+<span class="slash">/</span><span>register</span>
+{% endblock %}
+
 {% block content %}
-<div class="centered-container">
-    <h2>Регистрация</h2>
+<div class="auth-page">
+    <div class="auth-shell">
+        <aside class="auth-aside">
+            <div>
+                <div class="auth-aside-tag">Регистрация / new account</div>
+                <div class="auth-aside-title">
+                    Создай <span class="accent">мыс.</span><br>Разговаривай<br>не оглядываясь.
+                </div>
+                <p class="auth-aside-body">
+                    Регистрация даёт право создавать <strong>открытые</strong> и
+                    <strong>закрытые</strong> комнаты, управлять списком участников
+                    и оставлять подписанные сообщения.
+                </p>
+            </div>
+            <img src="{{ url_for('static', filename='vsc-logo-dark.png') }}"
+                 alt="" class="auth-aside-logo">
+            <div class="auth-aside-meta">
+                <span>Flask · CSV · SW</span>
+                <span>vsc_web/auth</span>
+            </div>
+        </aside>
 
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
+        <main class="auth-card">
+            <div class="auth-card-eyebrow">session.register</div>
+            <h2 class="auth-card-title">
+                Регистрация
+                <span class="step">01 / 01</span>
+            </h2>
 
-    <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="form-group">
-            <label for="login">Логин</label>
-            <input type="text" id="login" name="login" required minlength="3" maxlength="32" autocomplete="username">
-        </div>
-        <div class="form-group">
-            <label for="password">Пароль</label>
-            <input type="password" id="password" name="password" required minlength="4" autocomplete="new-password">
-        </div>
-        <div class="form-group">
-            <label for="password2">Подтвердите пароль</label>
-            <input type="password" id="password2" name="password2" required minlength="4" autocomplete="new-password">
-        </div>
-        <button class="btn btn-primary" type="submit">Зарегистрироваться</button>
-    </form>
+            {% if error %}
+            <div class="error-msg">{{ error }}</div>
+            {% endif %}
 
-    <p style="margin-top: 12px; font-size: 12px; color: #666;">
-        Уже есть аккаунт? <a href="{{ url_for('auth.login') }}">Войти</a>
-    </p>
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label for="login">Логин <span class="hint">3–32 символа</span></label>
+                    <input type="text" id="login" name="login" required
+                           minlength="3" maxlength="32" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Пароль <span class="hint">мин. 4</span></label>
+                    <input type="password" id="password" name="password" required
+                           minlength="4" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label for="password2">Повторите пароль <span class="hint">для проверки</span></label>
+                    <input type="password" id="password2" name="password2" required
+                           minlength="4" autocomplete="new-password">
+                </div>
+                <button class="btn btn-primary btn-block" type="submit" style="margin-top:6px;">
+                    Зарегистрироваться →
+                </button>
+            </form>
+
+            <div class="auth-switch">
+                Уже есть аккаунт? <a href="{{ url_for('auth.login') }}">Войти</a>
+            </div>
+        </main>
+    </div>
 </div>
 {% endblock %}
+
+{% block statusbar_left %}Регистрация нового пользователя{% endblock %}

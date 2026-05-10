@@ -69,9 +69,18 @@ def format_ts(value):
     return f'{d.day} {MONTHS[d.month - 1]} {time_str}'
 
 
+def get_room_info(room_id):
+    """Return dict with id, name, is_open for sidebar display."""
+    from models import Room
+    room = Room.query.filter_by(room_id=room_id).first()
+    if room:
+        return {'id': room_id, 'name': room.name or '', 'is_open': room.is_open}
+    return {'id': room_id, 'name': '', 'is_open': True}
+
+
 @app.context_processor
 def inject_room_helpers():
-    return {'room_display_name': get_room_display_name}
+    return {'room_display_name': get_room_display_name, 'get_room_info': get_room_info}
 
 
 @app.before_request

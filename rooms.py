@@ -190,6 +190,35 @@ def edit_message(room_id, msg_index):
     return jsonify({'ok': True, 'text': new_text})
 
 
+@rooms_bp.route('/room/<room_id>/message/<int:msg_index>/delete', methods=['POST'])
+def delete_message(room_id, msg_index):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
+        return jsonify({'ok': False}), 404
+
+    if not _can_access_room(room_id):
+        return jsonify({'ok': False}), 403
+
+    messages = Message.query.filter_by(room_id=room_id).order_by(Message.id).all()
+    if msg_index < 1 or msg_index > len(messages):
+        return jsonify({'ok': False}), 404
+
+    msg = messages[msg_index - 1]
+
+    if session.get('user_type') == 'registered':
+        current_user = session.get('login')
+    else:
+        current_user = session.get('anon_id')
+
+    if msg.author != current_user:
+        return jsonify({'ok': False}), 403
+
+    db.session.delete(msg)
+    db.session.commit()
+
+    return jsonify({'ok': True})
+
+
 @rooms_bp.route('/room/<room_id>/messages/poll')
 def poll_messages(room_id):
     """Возвращает сообщения начиная с индекса after (1-based) в формате JSON."""

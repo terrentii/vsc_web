@@ -1,26 +1,51 @@
-<div class="sidebar">
-    <div class="sidebar-header">Комнаты</div>
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <span>Комнаты</span>
+        <span class="count">{{ '%02d' % (session.get('visited_rooms', []) | length) }}</span>
+    </div>
+
     <div class="sidebar-search">
-        <form action="{{ url_for('rooms.join_room') }}" method="post">
+        <form action="{{ url_for('rooms.join_room') }}" method="post" class="sidebar-search-row">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="text" name="room_id" placeholder="Поиск по ID комнаты..." maxlength="10">
-            <button class="btn" type="submit" style="width: 100%; margin-top: 6px;">Войти</button>
+            <input type="text" name="room_id" placeholder="0000000000" maxlength="10"
+                   inputmode="numeric" class="mono">
+            <button type="submit" class="sidebar-search-go" title="Войти по ID">→</button>
         </form>
     </div>
+
     <div class="sidebar-list">
-        {% for rid in session.get('visited_rooms', []) %}
-        <a href="{{ url_for('rooms.room', room_id=rid) }}"
-           class="room-item{% if current_room == rid %} active{% endif %}">
-            {{ room_display_name(rid) }}
-        </a>
-        {% endfor %}
+        {% set visited = session.get('visited_rooms', []) %}
+        {% if visited %}
+            {% for rid in visited %}
+            {% set rinfo = get_room_info(rid) %}
+            <a href="{{ url_for('rooms.room', room_id=rid) }}"
+               class="room-item{% if current_room == rid %} active{% endif %}">
+                <div class="room-meta">
+                    <span class="room-name">{{ rinfo.name if rinfo.name else rid }}</span>
+                    <span class="room-id">ID {{ rid }}</span>
+                </div>
+                <span class="room-badge{% if not rinfo.is_open %} closed{% endif %}">
+                    {{ 'OPEN' if rinfo.is_open else 'CLSD' }}
+                </span>
+            </a>
+            {% endfor %}
+        {% else %}
+            <div class="sidebar-empty">Нет посещённых комнат.<br>Введите ID выше.</div>
+        {% endif %}
     </div>
+
     {% if session.get('user_type') == 'registered' %}
     <div class="sidebar-footer">
         <form action="{{ url_for('rooms.create_room') }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-primary" type="submit" style="width: 100%;">Создать комнату</button>
+            <button class="btn btn-primary btn-block" type="submit">+ Новая комната</button>
         </form>
     </div>
+    {% else %}
+    <div class="sidebar-footer">
+        <button class="btn btn-ghost btn-block" disabled style="opacity:.5;cursor:default;">
+            Войдите, чтобы создавать
+        </button>
+    </div>
     {% endif %}
-</div>
+</aside>
