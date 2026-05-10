@@ -12,6 +12,10 @@ app.secret_key = os.environ.get('SECRET_KEY', uuid.uuid4().hex)
 
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 ** 3  # 5 GB
 app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_COOKIE_DOMAIN'] = '.soufos.ru'
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['WTF_CSRF_SSL_STRICT'] = False
 app.config['SESSION_FILE_DIR'] = os.path.join(os.path.dirname(__file__), 'flask_session')
 app.config['SESSION_PERMANENT'] = False
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
