@@ -900,14 +900,15 @@
       .theme-toggle .tt-label { display: none; }
       .user-badge { padding: 4px 6px; font-size: 10px; }
 
-      /* Messages — remove right indent, show actions inline */
+      /* Messages — actions below text, no right indent */
       .msg { padding-right: 0; }
       .msg-actions {
         position: static;
         opacity: 1;
-        margin-top: 6px;
+        margin-top: 8px;
         display: flex;
         gap: 4px;
+        flex-wrap: wrap;
       }
 
       /* Chat input */
@@ -920,10 +921,42 @@
       .chat-empty-title { font-size: 18px; }
       .chat-empty-form { max-width: 100%; }
 
-      /* Auth */
-      .auth-page { padding: 24px 12px; }
-      .auth-card { padding: 24px 20px 20px; }
-      .auth-aside { padding: 20px; }
+      /* Auth — compact forms */
+      .auth-page { padding: 12px; align-items: flex-start; }
+      .auth-shell { max-width: 100%; gap: 0; }
+
+      /* Aside: strip down to tag + title only */
+      .auth-aside {
+        padding: 16px 18px;
+        min-height: auto;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        justify-content: flex-start;
+      }
+      .auth-aside > div:first-child { display: flex; align-items: center; gap: 12px; }
+      .auth-aside-tag { margin-bottom: 0; font-size: 9px; }
+      .auth-aside-title { font-size: 16px; line-height: 1.1; margin-bottom: 0; white-space: nowrap; }
+      .auth-aside-title br { display: none; }
+      .auth-aside-body, .auth-aside-meta { display: none; }
+
+      /* Card: tighter padding and spacing */
+      .auth-card { padding: 18px 18px 16px; border-top: none; border-left: 2px solid var(--mys-ink); }
+      .auth-card-eyebrow { display: none; }
+      .auth-card-title { font-size: 16px; padding-bottom: 12px; margin-bottom: 14px; }
+      .form-group { margin-bottom: 10px; gap: 4px; }
+      .form-group label { font-size: 9px; }
+      input[type="text"], input[type="password"], select, textarea { padding: 9px 12px; font-size: 13px; }
+      .auth-switch { margin-top: 14px; padding-top: 12px; }
+
+      /* Chat empty — compact join form */
+      .chat-empty { padding: 20px 16px; }
+      .chat-empty-mark { width: 48px; height: 48px; margin-bottom: 14px; }
+      .chat-empty-eyebrow { font-size: 9px; }
+      .chat-empty-title { font-size: 17px; margin-bottom: 10px; }
+      .chat-empty-sub { font-size: 12px; margin-bottom: 16px; }
+      .chat-empty-form { max-width: 100%; }
+      .chat-empty-form input { padding: 10px 12px; }
 
       /* Manage */
       .manage-shell { padding: 16px 12px; }
