@@ -152,6 +152,7 @@
     </div>
 </div>
 
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
     const messagesEl = document.getElementById('messages');
     const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
@@ -336,19 +337,56 @@
     function scrollBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
     scrollBottom();
 
-    const POLL_URL = '{{ url_for("rooms.poll_messages", room_id=room_id) }}';
-    setInterval(() => {
-        fetch(POLL_URL + '?after=' + msgCount)
+    // Socket.IO real-time messaging
+    const socket = io({ transports: ['websocket', 'polling'] });
+
+    socket.on('connect', () => {
+        socket.emit('join', { room_id: ROOM_ID });
+    });
+
+    socket.on('new_message', m => {
+        if (m.index <= msgCount) return;
+        const noMsgs = document.getElementById('no-msgs');
+        if (noMsgs) noMsgs.remove();
+        const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
+        messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
+        msgCount = m.index;
+        notifyNewMsg(m);
+        bindReply(messagesEl);
+        bindEdit(messagesEl);
+        bindDelete(messagesEl);
+        if (wasAtBottom) scrollBottom();
+    });
+
+    socket.on('edit_message', data => {
+        const msgEl = document.getElementById('msg-' + data.index);
+        if (msgEl) {
+            const textEl = msgEl.querySelector('.msg-text');
+            if (textEl) textEl.textContent = data.text;
+        }
+    });
+
+    socket.on('delete_message', data => {
+        const msgEl = document.getElementById('msg-' + data.index);
+        if (msgEl) msgEl.remove();
+    });
+
+    // On reconnect, catch up on missed messages
+    let _reconnecting = false;
+    socket.on('disconnect', () => { _reconnecting = true; });
+    socket.io.on('reconnect', () => {
+        socket.emit('join', { room_id: ROOM_ID });
+        fetch('{{ url_for("rooms.poll_messages", room_id=room_id) }}?after=' + msgCount)
             .then(r => r.ok ? r.json() : [])
             .then(msgs => {
                 if (!msgs.length) return;
-                const noMsgs = document.getElementById('no-msgs');
-                if (noMsgs) noMsgs.remove();
                 const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
                 msgs.forEach(m => {
+                    if (m.index <= msgCount) return;
+                    const noMsgs = document.getElementById('no-msgs');
+                    if (noMsgs) noMsgs.remove();
                     messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
                     msgCount = m.index;
-                    notifyNewMsg(m);
                 });
                 bindReply(messagesEl);
                 bindEdit(messagesEl);
@@ -356,7 +394,7 @@
                 if (wasAtBottom) scrollBottom();
             })
             .catch(() => {});
-    }, 3000);
+    });
 
     const msgForm = document.getElementById('msg-form');
     const textInput = msgForm.querySelector('.chat-input-text');

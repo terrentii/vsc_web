@@ -6,9 +6,10 @@ import uuid
 from datetime import datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_from_directory
+from flask_socketio import join_room as sio_join_room, emit as sio_emit
 from werkzeug.utils import secure_filename
 
-from extensions import db
+from extensions import db, socketio
 from models import Room, Message, RoomMember
 
 rooms_bp = Blueprint('rooms', __name__)
@@ -204,6 +205,7 @@ def edit_message(room_id, msg_index):
     msg.text = new_text
     db.session.commit()
 
+    socketio.emit('edit_message', {'index': msg_index, 'text': new_text}, room=room_id)
     return jsonify({'ok': True, 'text': new_text})
 
 
@@ -233,6 +235,7 @@ def delete_message(room_id, msg_index):
     db.session.delete(msg)
     db.session.commit()
 
+    socketio.emit('delete_message', {'index': msg_index}, room=room_id)
     return jsonify({'ok': True})
 
 
@@ -314,6 +317,24 @@ def post_message(room_id):
     )
     db.session.add(msg)
     db.session.commit()
+
+    # Determine 1-based index
+    msg_index = Message.query.filter_by(room_id=room_id).order_by(Message.id).count()
+    entry = {
+        'index': msg_index,
+        'author': msg.author,
+        'timestamp': msg.timestamp.isoformat(),
+        'text': msg.text,
+        'reply_to': str(msg.reply_to) if msg.reply_to else '',
+        'media': msg.media or '',
+    }
+    if entry['reply_to']:
+        ri = int(entry['reply_to'])
+        ref = Message.query.filter_by(room_id=room_id).order_by(Message.id).offset(ri - 1).first()
+        if ref:
+            entry['reply_author'] = ref.author
+            entry['reply_text'] = ref.text[:60]
+    socketio.emit('new_message', entry, room=room_id)
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'ok': True})
@@ -452,3 +473,16 @@ def manage_room(room_id):
 
     db.session.commit()
     return redirect(url_for('rooms.manage_room', room_id=room_id))
+
+
+# ── Socket.IO events ──────────────────────────────────────────────────────────
+
+@socketio.on('join')
+def on_join(data):
+    room_id = data.get('room_id', '')
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
+        return
+    if not _can_access_room(room_id):
+        return
+    sio_join_room(room_id)

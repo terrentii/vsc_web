@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, session, send_from_directory
 from flask_session import Session
 
-from extensions import db, login_manager, csrf
+from extensions import db, login_manager, csrf, socketio
 
 app = Flask(__name__)
 
@@ -59,6 +59,7 @@ Session(app)
 db.init_app(app)
 login_manager.init_app(app)
 csrf.init_app(app)
+socketio.init_app(app, cors_allowed_origins='*', async_mode='threading', manage_session=False)
 
 from auth import auth_bp
 from rooms import rooms_bp, get_room_display_name
@@ -194,4 +195,4 @@ if __name__ == '__main__':
     os.makedirs('rooms', exist_ok=True)
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    socketio.run(app, debug=True)
