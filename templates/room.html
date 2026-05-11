@@ -97,6 +97,7 @@
             {% endif %}
         </div>
 
+        <div class="chat-form-wrap">
         <form id="msg-form" action="{{ url_for('rooms.post_message', room_id=room_id) }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="reply_to" id="reply_to" value="">
@@ -121,12 +122,13 @@
             <div class="chat-input">
                 <button type="button" class="attach-btn" id="attach-btn" title="Прикрепить файл">📎</button>
                 <textarea class="chat-input-text" name="text" rows="1"
-                          placeholder="Сообщение или файл… (Shift+Enter — новая строка)"
+                          placeholder="Сообщение или файл…"
                           data-placeholder-mobile="Сообщение…"
                           autocomplete="off"></textarea>
                 <button class="btn btn-primary" type="submit">Отправить ↵</button>
             </div>
         </form>
+        </div>
 
         {% if session.get('user_type') == 'anon' %}
         <div class="disclaimer-overlay" id="disclaimer-overlay">
@@ -461,7 +463,7 @@
     (function() {
         const full = textInput.placeholder;
         const short = textInput.dataset.placeholderMobile;
-        const mq = window.matchMedia('(max-width: 600px)');
+        const mq = window.matchMedia('(pointer: coarse), (max-width: 600px)');
         const update = () => { textInput.placeholder = mq.matches ? short : full; };
         mq.addEventListener('change', update);
         update();
@@ -476,6 +478,8 @@
 
     attachBtn.addEventListener('click', () => fileInput.click());
 
+    let activeXhr = null;
+
     fileInput.addEventListener('change', function() {
         const file = fileInput.files[0];
         if (!file) return;
@@ -483,23 +487,36 @@
         uploadPreview.style.display = 'flex';
         uploadProgress.style.display = 'block';
         uploadProgressFill.style.width = '0%';
+        uploadProgressFill.classList.remove('indeterminate');
         attachBtn.classList.add('has-file');
         const fd = new FormData();
         fd.append('file', file);
         const xhr = new XMLHttpRequest();
+        activeXhr = xhr;
         xhr.open('POST', '/room/' + ROOM_ID + '/upload');
         xhr.setRequestHeader('X-CSRFToken', CSRF_TOKEN);
-        xhr.timeout = 5 * 60 * 1000; // 5 минут макс
+        xhr.timeout = 5 * 60 * 1000;
         xhr.upload.addEventListener('progress', function(e) {
             if (e.lengthComputable) {
-                uploadProgressFill.classList.remove('indeterminate');
-                uploadProgressFill.style.width = Math.round(e.loaded / e.total * 100) + '%';
+                const pct = Math.round(e.loaded / e.total * 100);
+                if (pct >= 100) {
+                    // байты отправлены, ждём ответа сервера — показываем пульсацию
+                    uploadProgressFill.classList.add('indeterminate');
+                    uploadProgressFill.style.width = '100%';
+                } else {
+                    uploadProgressFill.classList.remove('indeterminate');
+                    uploadProgressFill.style.width = pct + '%';
+                }
             } else {
                 uploadProgressFill.classList.add('indeterminate');
                 uploadProgressFill.style.width = '100%';
             }
         });
-        const onDone = () => { uploadProgress.style.display = 'none'; uploadProgressFill.classList.remove('indeterminate'); };
+        const onDone = () => {
+            activeXhr = null;
+            uploadProgress.style.display = 'none';
+            uploadProgressFill.classList.remove('indeterminate');
+        };
         xhr.addEventListener('load', function() {
             onDone();
             try {
@@ -509,14 +526,16 @@
             } catch(e) { clearUpload(); alert('Ошибка загрузки'); }
         });
         xhr.addEventListener('error', function() { onDone(); clearUpload(); alert('Ошибка загрузки'); });
-        xhr.addEventListener('abort', function() { onDone(); clearUpload(); });
+        xhr.addEventListener('abort', function() { onDone(); });
         xhr.addEventListener('timeout', function() { onDone(); clearUpload(); alert('Превышено время загрузки'); });
         xhr.send(fd);
     });
 
     function clearUpload() {
+        if (activeXhr) { activeXhr.abort(); activeXhr = null; }
         fileInput.value = ''; mediaFilename.value = '';
         uploadPreview.style.display = 'none'; uploadProgress.style.display = 'none';
+        uploadProgressFill.classList.remove('indeterminate');
         attachBtn.classList.remove('has-file');
     }
 

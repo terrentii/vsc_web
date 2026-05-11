@@ -1040,12 +1040,17 @@
       .chat-empty-form input { padding: 10px 12px; }
 
       /* Chat header — compact on mobile */
-      .chat-header { padding: 8px 12px; gap: 8px; }
+      .chat-header { padding: 8px 12px; gap: 8px; position: sticky; top: 0; z-index: 10; }
       .chat-header-id { display: none; }
       .chat-header-name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
       .chat-header-pop { font-size: 9px; letter-spacing: .06em; white-space: nowrap; overflow: hidden; width: 0; padding: 0; }
       .chat-header-pop::after { content: attr(data-short); }
       .btn.btn-sm { padding: 4px 10px; font-size: 10px; white-space: nowrap; }
+
+      /* Sticky input + scrollable messages on mobile */
+      .chat-panel { overflow-y: auto; }
+      .chat-messages { overflow-y: visible; flex: none; min-height: 0; }
+      .chat-form-wrap { position: sticky; bottom: 0; z-index: 10; background: var(--paper-2); }
 
       /* Manage */
       .manage-shell { padding: 16px 12px; }
