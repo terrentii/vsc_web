@@ -14,22 +14,28 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 ** 3  # 5 GB
+
+# Настройки сессии
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = os.path.join(os.path.dirname(__file__), 'flask_session')
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
-app.config['SESSION_COOKIE_NAME'] = 'vsc_session'
+app.config['SESSION_COOKIE_NAME'] = 'vsc_sid'
+app.config['SESSION_COOKIE_PATH'] = '/'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_DOMAIN'] = None
+
+# CSRF настройки
+app.config['WTF_CSRF_TIME_LIMIT'] = None
 app.config['WTF_CSRF_SSL_STRICT'] = False
+app.config['WTF_CSRF_CHECK_DEFAULT'] = True
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
     'sqlite:///' + os.path.join(os.path.dirname(__file__), 'app.db')
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['WTF_CSRF_TIME_LIMIT'] = None  # токен не истекает вместе с сессией
-
 Session(app)
 db.init_app(app)
 login_manager.init_app(app)
