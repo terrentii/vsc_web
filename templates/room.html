@@ -178,6 +178,7 @@
     })();
 </script>
 <script src="{{ url_for('static', filename='vendor/highlight.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
 <script>
     const messagesEl = document.getElementById('messages');
     const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
@@ -415,29 +416,80 @@
         });
     });
 
-    // Polling — простой fetch каждые 3 секунды, работает везде
+    // Polling — простой fetch каждые 3 секунды, гарантированный fallback
+    function applyMessages(msgs) {
+        if (!msgs.length) return;
+        const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
+        msgs.forEach(m => {
+            if (m.index <= msgCount) return;
+            const noMsgs = document.getElementById('no-msgs');
+            if (noMsgs) noMsgs.remove();
+            messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
+            msgCount = m.index;
+            notifyNewMsg(m);
+        });
+        bindReply(messagesEl);
+        bindEdit(messagesEl);
+        bindDelete(messagesEl);
+        if (wasAtBottom) scrollBottom();
+    }
+
     function poll() {
         fetch('{{ url_for("rooms.poll_messages", room_id=room_id) }}?after=' + msgCount)
             .then(r => r.ok ? r.json() : [])
-            .then(msgs => {
-                if (!msgs.length) return;
-                const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
-                msgs.forEach(m => {
-                    if (m.index <= msgCount) return;
-                    const noMsgs = document.getElementById('no-msgs');
-                    if (noMsgs) noMsgs.remove();
-                    messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
-                    msgCount = m.index;
-                    notifyNewMsg(m);
-                });
-                bindReply(messagesEl);
-                bindEdit(messagesEl);
-                bindDelete(messagesEl);
-                if (wasAtBottom) scrollBottom();
-            })
+            .then(applyMessages)
             .catch(() => {});
     }
-    setInterval(poll, 3000);
+
+    let pollTimer = setInterval(poll, 3000);
+
+    // WebSocket — пробуем подключиться только через WS (без HTTP-polling Socket.IO).
+    // Если подключился — останавливаем setInterval и переходим на push.
+    // Если нет — polling продолжает работать, ничего не ломается.
+    try {
+        const socket = io({
+            transports: ['websocket'],
+            reconnectionAttempts: 5,
+            timeout: 5000,
+        });
+
+        socket.on('connect', () => {
+            socket.emit('join', { room_id: ROOM_ID });
+            clearInterval(pollTimer);  // WebSocket работает — polling не нужен
+            pollTimer = null;
+        });
+
+        socket.on('disconnect', () => {
+            // WS отвалился — возобновляем polling
+            if (!pollTimer) pollTimer = setInterval(poll, 3000);
+        });
+
+        socket.io.on('reconnect', () => {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            socket.emit('join', { room_id: ROOM_ID });
+            poll(); // догоняем пропущенные сообщения
+        });
+
+        socket.on('new_message', m => {
+            applyMessages([m]);
+        });
+
+        socket.on('edit_message', data => {
+            const msgEl = document.getElementById('msg-' + data.index);
+            if (msgEl) {
+                const textEl = msgEl.querySelector('.msg-text');
+                if (textEl) { textEl.dataset.raw = data.text; textEl.innerHTML = renderText(data.text); }
+            }
+        });
+
+        socket.on('delete_message', data => {
+            const msgEl = document.getElementById('msg-' + data.index);
+            if (msgEl) msgEl.remove();
+        });
+
+    } catch(e) {
+        // Socket.IO недоступен — продолжаем на polling
+    }
 
     const msgForm = document.getElementById('msg-form');
     const textInput = msgForm.querySelector('.chat-input-text');
