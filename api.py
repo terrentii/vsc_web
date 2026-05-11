@@ -58,12 +58,13 @@ def get_messages(room_id):
     if not _api_can_access(room):
         return jsonify({'error': 'Access denied'}), 403
 
-    after = request.args.get('after', 0, type=int)
+    after = max(0, request.args.get('after', 0, type=int))
     messages = (
         Message.query
         .filter_by(room_id=room_id)
         .order_by(Message.id)
         .offset(after)
+        .limit(200)
         .all()
     )
 
@@ -94,7 +95,7 @@ def post_message(room_id):
         return jsonify({'error': 'Access denied'}), 403
 
     data = request.get_json(silent=True) or {}
-    text = (data.get('text') or '').strip()
+    text = (data.get('text') or '').strip()[:4000]
     if not text:
         return jsonify({'error': 'text is required'}), 400
 
