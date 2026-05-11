@@ -1,8 +1,9 @@
+import hashlib
 import os
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from flask import Flask, render_template, session, send_from_directory
+from flask import Flask, render_template, request, session, send_from_directory
 from flask_session import Session
 
 from extensions import db, login_manager, csrf
@@ -117,13 +118,24 @@ def inject_room_helpers():
     return {'room_display_name': get_room_display_name, 'get_room_info': get_room_info}
 
 
+def _anon_fingerprint():
+    ip = request.remote_addr or ''
+    ua = request.headers.get('User-Agent', '')
+    return hashlib.sha256(f'{ip}|{ua}'.encode()).hexdigest()
+
+
 @app.before_request
 def assign_anon_id():
     if 'user_type' not in session:
+        from models import AnonIdentity
+        fp = _anon_fingerprint()
+        identity = AnonIdentity.query.filter_by(fingerprint=fp).first()
+        if not identity:
+            identity = AnonIdentity(fingerprint=fp)
+            db.session.add(identity)
+            db.session.commit()
         session['user_type'] = 'anon'
-        existing = session.get('_anon_counter', 0) + 1
-        session['_anon_counter'] = existing
-        session['anon_id'] = f'Anon{existing}'
+        session['anon_id'] = f'Anon{identity.id}'
 
 
 @app.route('/sw.js')

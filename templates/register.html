@@ -36,7 +36,15 @@
             </h2>
 
             {% if error %}
-            <div class="error-msg">{{ error }}</div>
+              {% if conflict %}
+              <div class="conflict-msg">
+                  <div class="conflict-label">// имя недоступно</div>
+                  <div class="conflict-name">{{ conflict }}</div>
+                  <div class="conflict-reason">{{ error }}</div>
+              </div>
+              {% else %}
+              <div class="error-msg">{{ error }}</div>
+              {% endif %}
             {% endif %}
 
             <form method="post">
