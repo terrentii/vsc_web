@@ -177,7 +177,6 @@
         }
     })();
 </script>
-<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/highlight.min.js') }}"></script>
 <script>
     const messagesEl = document.getElementById('messages');
@@ -416,47 +415,8 @@
         });
     });
 
-    // Socket.IO real-time messaging
-    const socket = io({ transports: ['websocket', 'polling'] });
-
-    socket.on('connect', () => {
-        socket.emit('join', { room_id: ROOM_ID });
-    });
-
-    socket.on('new_message', m => {
-        if (m.index <= msgCount) return;
-        const noMsgs = document.getElementById('no-msgs');
-        if (noMsgs) noMsgs.remove();
-        const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
-        messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
-        msgCount = m.index;
-        notifyNewMsg(m);
-        bindReply(messagesEl);
-        bindEdit(messagesEl);
-        bindDelete(messagesEl);
-        if (wasAtBottom) scrollBottom();
-    });
-
-    socket.on('edit_message', data => {
-        const msgEl = document.getElementById('msg-' + data.index);
-        if (msgEl) {
-            const textEl = msgEl.querySelector('.msg-text');
-            if (textEl) {
-                textEl.dataset.raw = data.text;
-                textEl.innerHTML = renderText(data.text);
-            }
-        }
-    });
-
-    socket.on('delete_message', data => {
-        const msgEl = document.getElementById('msg-' + data.index);
-        if (msgEl) msgEl.remove();
-    });
-
-    // On reconnect, catch up on missed messages
-    socket.on('disconnect', () => {});
-    socket.io.on('reconnect', () => {
-        socket.emit('join', { room_id: ROOM_ID });
+    // Polling — простой fetch каждые 3 секунды, работает везде
+    function poll() {
         fetch('{{ url_for("rooms.poll_messages", room_id=room_id) }}?after=' + msgCount)
             .then(r => r.ok ? r.json() : [])
             .then(msgs => {
@@ -468,6 +428,7 @@
                     if (noMsgs) noMsgs.remove();
                     messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
                     msgCount = m.index;
+                    notifyNewMsg(m);
                 });
                 bindReply(messagesEl);
                 bindEdit(messagesEl);
@@ -475,7 +436,8 @@
                 if (wasAtBottom) scrollBottom();
             })
             .catch(() => {});
-    });
+    }
+    setInterval(poll, 3000);
 
     const msgForm = document.getElementById('msg-form');
     const textInput = msgForm.querySelector('.chat-input-text');
