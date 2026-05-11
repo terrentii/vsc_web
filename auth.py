@@ -45,6 +45,14 @@ def register():
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    import sys
+    print(f"=== LOGIN DEBUG ===", file=sys.stderr)
+    print(f"Method: {request.method}", file=sys.stderr)
+    print(f"Form data: {request.form}", file=sys.stderr)
+    print(f"Session before: {dict(session)}", file=sys.stderr)
+    print(f"CSRF token from form: {request.form.get('csrf_token')}", file=sys.stderr)
+    print(f"Cookies: {request.cookies}", file=sys.stderr)
+
     if request.method == 'GET':
         return render_template('login.html')
 
