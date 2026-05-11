@@ -66,3 +66,13 @@ class AnonIdentity(db.Model):
     id          = db.Column(db.Integer, primary_key=True)  # и есть номер анона
     fingerprint = db.Column(db.String(64), unique=True, nullable=False, index=True)
     first_seen  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ApiKey(db.Model):
+    __tablename__ = 'api_keys'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    login      = db.Column(db.String(64), db.ForeignKey('users.login'), nullable=False, index=True)
+    key_hash   = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    label      = db.Column(db.String(64), default='', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
