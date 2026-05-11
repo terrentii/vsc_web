@@ -461,12 +461,8 @@
     const msgForm = document.getElementById('msg-form');
     const textInput = msgForm.querySelector('.chat-input-text');
     (function() {
-        const full = textInput.placeholder;
-        const short = textInput.dataset.placeholderMobile;
-        const mq = window.matchMedia('(pointer: coarse), (max-width: 600px)');
-        const update = () => { textInput.placeholder = mq.matches ? short : full; };
-        mq.addEventListener('change', update);
-        update();
+        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (isMobile) textInput.placeholder = textInput.dataset.placeholderMobile;
     })();
     const fileInput = document.getElementById('file-input');
     const attachBtn = document.getElementById('attach-btn');
@@ -495,7 +491,7 @@
         activeXhr = xhr;
         xhr.open('POST', '/room/' + ROOM_ID + '/upload');
         xhr.setRequestHeader('X-CSRFToken', CSRF_TOKEN);
-        xhr.timeout = 5 * 60 * 1000;
+        xhr.timeout = 30000; // 30 секунд — если завис, разблокируем
         xhr.upload.addEventListener('progress', function(e) {
             if (e.lengthComputable) {
                 const pct = Math.round(e.loaded / e.total * 100);

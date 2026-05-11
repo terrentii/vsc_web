@@ -547,10 +547,11 @@
     }
     .reply-cancel, .upload-preview-cancel {
       background: transparent; border: 1.5px solid var(--mys-ink);
-      width: 22px; height: 22px;
+      min-width: 22px; min-height: 22px; width: 22px; height: 22px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; color: var(--mys-ink);
       font-size: 14px; line-height: 1;
+      touch-action: manipulation; /* убирает задержку 300мс на мобильном */
     }
     .reply-cancel:hover, .upload-preview-cancel:hover {
       background: var(--warn); color: #fff; border-color: var(--warn);
