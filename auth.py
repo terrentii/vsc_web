@@ -1,9 +1,13 @@
+import re
+
 from flask import Blueprint, render_template, request, redirect, url_for, session
 from flask_login import login_user, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from extensions import db
 from models import User, RoomMember
+
+LOGIN_RE = re.compile(r'^[a-zA-Z0-9_]{3,32}$')
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -20,8 +24,8 @@ def register():
     if not login or not password:
         return render_template('register.html', error='Логин и пароль обязательны.')
 
-    if len(login) < 3 or len(login) > 32:
-        return render_template('register.html', error='Логин должен быть от 3 до 32 символов.')
+    if not LOGIN_RE.match(login):
+        return render_template('register.html', error='Логин 3–32 символа: только буквы, цифры и _.')
 
     if len(password) < 4:
         return render_template('register.html', error='Пароль должен быть не менее 4 символов.')

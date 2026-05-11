@@ -1,10 +1,12 @@
 import os
+import re
 import shutil
 import random
 import uuid
 from datetime import datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_from_directory
+from werkzeug.utils import secure_filename
 
 from extensions import db
 from models import Room, Message, RoomMember
@@ -266,8 +268,14 @@ def post_message(room_id):
     if not _can_access_room(room_id):
         return redirect(url_for('index'))
 
-    text = request.form.get('text', '').strip()
+    text = request.form.get('text', '').strip()[:4000]
     media = request.form.get('media', '').strip()
+    # Разрешаем только имя файла без пути — только файлы этой комнаты
+    if media:
+        media = os.path.basename(media)
+        media_path = os.path.join(ROOMS_DIR, room_id, 'media', media)
+        if not os.path.isfile(media_path):
+            media = ''
     if not text and not media:
         return redirect(url_for('rooms.room', room_id=room_id))
 
@@ -316,7 +324,7 @@ def upload_media(room_id):
     media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
     os.makedirs(media_dir, exist_ok=True)
 
-    original_name = file.filename.rsplit('/', 1)[-1].rsplit('\\', 1)[-1]
+    original_name = secure_filename(file.filename) or 'file'
     safe_name = uuid.uuid4().hex + '_' + original_name
     file.save(os.path.join(media_dir, safe_name))
 
@@ -416,7 +424,7 @@ def manage_room(room_id):
         return render_template('manage.html', room_id=room_id, config=room, users=members)
 
     room.is_open = request.form.get('is_open', 'true') == 'true'
-    room.name = request.form.get('room_name', '').strip()
+    room.name = request.form.get('room_name', '').strip()[:64]
 
     add_user = request.form.get('add_user', '').strip()
     if add_user and not RoomMember.query.filter_by(room_id=room_id, login=add_user).first():

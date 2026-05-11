@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}400 — Неверный запрос{% endblock %}
+
+{% block menubar_route %}
+<span class="slash">/</span><span>__400</span>
+{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-card">
+        <div class="error-stripe">
+            <span>400 bad request</span>
+            <span>vsc_web · errors</span>
+        </div>
+        <div class="error-code">
+            <span class="accent">400</span>
+            <span class="marker">bad request</span>
+        </div>
+        <div class="error-title">Неверный запрос</div>
+        <p class="error-sub">
+            Сервер не смог обработать запрос — возможно, данные повреждены
+            или форма отправлена некорректно.
+        </p>
+        <div class="error-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">На главную</a>
+            <button class="btn btn-ghost" onclick="history.back()">Назад</button>
+            <button class="btn btn-ghost" onclick="location.reload()">Перезагрузить</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block statusbar_left %}Ошибка 400 · неверный запрос{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}405 — Метод не разрешён{% endblock %}
+
+{% block menubar_route %}
+<span class="slash">/</span><span>__405</span>
+{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-card">
+        <div class="error-stripe">
+            <span>405 method not allowed</span>
+            <span>vsc_web · errors</span>
+        </div>
+        <div class="error-code">
+            <span class="accent">405</span>
+            <span class="marker">not allowed</span>
+        </div>
+        <div class="error-title">Метод не разрешён</div>
+        <p class="error-sub">
+            Этот маршрут не принимает такой тип запроса.
+            Попробуйте вернуться назад и повторить действие.
+        </p>
+        <div class="error-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">На главную</a>
+            <button class="btn btn-ghost" onclick="history.back()">Назад</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block statusbar_left %}Ошибка 405 · метод не разрешён{% endblock %}

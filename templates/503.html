@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}503 — Сервис недоступен{% endblock %}
+
+{% block menubar_route %}
+<span class="slash">/</span><span>__503</span>
+{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-card danger">
+        <div class="error-stripe danger">
+            <span>503 service unavailable</span>
+            <span>vsc_web · errors</span>
+        </div>
+        <div class="error-code">
+            <span class="accent">503</span>
+            <span class="marker">unavailable</span>
+        </div>
+        <div class="error-title">Сервис недоступен</div>
+        <p class="error-sub">
+            Сервер временно не может обрабатывать запросы — возможно, идут
+            технические работы. Попробуйте повторить через несколько минут.
+        </p>
+        <div class="error-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">На главную</a>
+            <button class="btn btn-ghost" onclick="location.reload()">Перезагрузить</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block statusbar_left %}Ошибка 503 · сервис недоступен{% endblock %}

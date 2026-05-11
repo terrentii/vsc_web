@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}413 — Файл слишком большой{% endblock %}
+
+{% block menubar_route %}
+<span class="slash">/</span><span>__413</span>
+{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-card danger">
+        <div class="error-stripe danger">
+            <span>413 payload too large</span>
+            <span>vsc_web · errors</span>
+        </div>
+        <div class="error-code">
+            <span class="accent">413</span>
+            <span class="marker">too large</span>
+        </div>
+        <div class="error-title">Файл слишком большой</div>
+        <p class="error-sub">
+            Размер загружаемого файла превышает допустимый лимит 5 ГБ.
+            Уменьшите файл и попробуйте снова.
+        </p>
+        <div class="error-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">На главную</a>
+            <button class="btn btn-ghost" onclick="history.back()">Назад</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block statusbar_left %}Ошибка 413 · файл слишком большой{% endblock %}
