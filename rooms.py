@@ -82,6 +82,9 @@ def _can_access_room(room_id):
     room = Room.query.filter_by(room_id=room_id).first()
     if not room:
         return False
+    # Личная комната — только её владелец
+    if room.personal_login:
+        return session.get('login') == room.personal_login
     if room.is_open:
         return True
     if session.get('user_type') != 'registered':
@@ -90,6 +93,10 @@ def _can_access_room(room_id):
 
 
 def _track_room(room_id):
+    # Личную комнату не трекаем — она всегда сверху отдельно
+    if room_id == session.get('personal_room_id'):
+        return
+
     visited = session.get('visited_rooms', [])
     if room_id in visited:
         visited.remove(room_id)

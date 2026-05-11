@@ -19,18 +19,22 @@
                 <span class="chat-header-id">{{ room_id }}</span>
             {% endif %}
             <span class="chat-header-spacer"></span>
-            <span class="chat-header-pop" data-short="{{ 'OPN' if config.is_open else 'LCK' }}">{{ 'Открытая' if config.is_open else 'Закрытая' }}</span>
-            {% if session.get('user_type') == 'registered' %}
-                {% if config.creator_login == session.get('login') %}
-                    <a href="{{ url_for('rooms.manage_room', room_id=room_id) }}" class="btn btn-sm">Управление</a>
-                {% else %}
-                    <form action="{{ url_for('rooms.leave_room', room_id=room_id) }}" method="post" style="display:inline;">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button class="btn btn-sm" type="submit"
-                                style="border-color:var(--warn);color:var(--warn);box-shadow:3px 3px 0 0 var(--warn);">
-                            Покинуть
-                        </button>
-                    </form>
+            {% if config.personal_login %}
+                <span class="chat-header-pop" data-short="FAV">Личное</span>
+            {% else %}
+                <span class="chat-header-pop" data-short="{{ 'OPN' if config.is_open else 'LCK' }}">{{ 'Открытая' if config.is_open else 'Закрытая' }}</span>
+                {% if session.get('user_type') == 'registered' %}
+                    {% if config.creator_login == session.get('login') %}
+                        <a href="{{ url_for('rooms.manage_room', room_id=room_id) }}" class="btn btn-sm">Управление</a>
+                    {% else %}
+                        <form action="{{ url_for('rooms.leave_room', room_id=room_id) }}" method="post" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm" type="submit"
+                                    style="border-color:var(--warn);color:var(--warn);box-shadow:3px 3px 0 0 var(--warn);">
+                                Покинуть
+                            </button>
+                        </form>
+                    {% endif %}
                 {% endif %}
             {% endif %}
         </div>

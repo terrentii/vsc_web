@@ -24,6 +24,7 @@ class Room(db.Model):
     is_open = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     creator_login = db.Column(db.String(64), nullable=False)
+    personal_login = db.Column(db.String(64), unique=True, nullable=True, index=True)
 
     messages = db.relationship('Message', backref='room', lazy='dynamic',
                                cascade='all, delete-orphan',

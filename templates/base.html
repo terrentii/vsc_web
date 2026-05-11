@@ -311,6 +311,11 @@
       color: var(--muted);
     }
     .sidebar-list .room-item .room-badge.closed { border-color: var(--warn); color: var(--warn); }
+    .room-item-personal { border-left-color: var(--mys-blue); border-bottom: 1.5px solid var(--hairline); margin-bottom: 4px; }
+    .room-item-personal .room-name { color: var(--mys-blue); font-weight: 700; }
+    .personal-badge { border-color: var(--mys-blue); color: var(--mys-blue); }
+    .room-item-personal.active .room-name { color: #14182a; }
+    .room-item-personal.active:hover .room-name { color: #fff; }
     .sidebar-list .room-item.active {
       background: var(--mys-ink); color: var(--paper);
       border-left-color: var(--mys-blue);

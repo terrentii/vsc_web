@@ -136,6 +136,13 @@ def assign_anon_id():
             db.session.commit()
         session['user_type'] = 'anon'
         session['anon_id'] = f'Anon{identity.id}'
+    elif session.get('user_type') == 'registered' and 'personal_room_id' not in session:
+        from auth import _ensure_personal_room
+        login = session.get('login')
+        if login:
+            personal_id = _ensure_personal_room(login)
+            session['personal_room_id'] = personal_id
+            session.modified = True
 
 
 @app.route('/sw.js')

@@ -7,12 +7,30 @@ from flask_login import login_user, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from extensions import db
-from models import User, RoomMember
+from models import User, RoomMember, Room
 
 LOGIN_RE = re.compile(r'^[a-zA-Zа-яА-ЯёЁ0-9_]{3,32}$')
 ANON_RE  = re.compile(r'^[Aa]non\d+$')
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _ensure_personal_room(login: str) -> str:
+    """Создаёт личную комнату пользователя если её нет. Возвращает room_id."""
+    from rooms import _generate_room_id
+    from datetime import datetime
+    existing = Room.query.filter_by(personal_login=login).first()
+    if existing:
+        return existing.room_id
+    room_id = _generate_room_id()
+    now = datetime.utcnow()
+    room = Room(room_id=room_id, name='Избранное', is_open=False,
+                created_at=now, creator_login=login, personal_login=login)
+    member = RoomMember(room_id=room_id, login=login, joined_at=now, role='godfather')
+    db.session.add(room)
+    db.session.add(member)
+    db.session.commit()
+    return room_id
 
 # Брутфорс-защита: max 5 попыток за 10 минут с одного IP
 _LIMIT_ATTEMPTS = 5
@@ -85,6 +103,8 @@ def register():
     login_user(user)
     session['user_type'] = 'registered'
     session['login'] = login
+    personal_id = _ensure_personal_room(login)
+    session['personal_room_id'] = personal_id
     session['visited_rooms'] = []
     return redirect(url_for('index'))
 
@@ -116,8 +136,10 @@ def login():
     login_user(user)
     session['user_type'] = 'registered'
     session['login'] = login_val
+    personal_id = _ensure_personal_room(login_val)
+    session['personal_room_id'] = personal_id
     members = RoomMember.query.filter_by(login=login_val).order_by(RoomMember.joined_at.desc()).all()
-    session['visited_rooms'] = [m.room_id for m in members]
+    session['visited_rooms'] = [m.room_id for m in members if m.room_id != personal_id]
     return redirect(url_for('index'))
 
 

@@ -14,6 +14,18 @@
     </div>
 
     <div class="sidebar-list">
+        {% set personal_id = session.get('personal_room_id') %}
+        {% if personal_id %}
+            <a href="{{ url_for('rooms.room', room_id=personal_id) }}"
+               class="room-item room-item-personal{% if current_room == personal_id %} active{% endif %}">
+                <div class="room-meta">
+                    <span class="room-name">Избранное</span>
+                    <span class="room-id">личное</span>
+                </div>
+                <span class="room-badge personal-badge">FAV</span>
+            </a>
+        {% endif %}
+
         {% set visited = session.get('visited_rooms', []) %}
         {% if visited %}
             {% for rid in visited %}
@@ -29,7 +41,7 @@
                 </span>
             </a>
             {% endfor %}
-        {% else %}
+        {% elif not personal_id %}
             <div class="sidebar-empty">Нет посещённых комнат.<br>Введите ID выше.</div>
         {% endif %}
     </div>
