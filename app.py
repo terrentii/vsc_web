@@ -119,24 +119,27 @@ def inject_room_helpers():
     return {'room_display_name': get_room_display_name, 'get_room_info': get_room_info}
 
 
-def _anon_fingerprint():
-    ip = request.remote_addr or ''
-    ua = request.headers.get('User-Agent', '')
-    return hashlib.sha256(f'{ip}|{ua}'.encode()).hexdigest()
+def _get_anon_token():
+    """Уникальный токен из отдельного долгоживущего cookie, не зависит от сессии."""
+    return request.cookies.get('vsc_anon')
 
 
 @app.before_request
 def assign_anon_id():
     if 'user_type' not in session:
         from models import AnonIdentity
-        fp = _anon_fingerprint()
-        identity = AnonIdentity.query.filter_by(fingerprint=fp).first()
+        token = _get_anon_token()
+        if token:
+            identity = AnonIdentity.query.filter_by(fingerprint=token).first()
+        else:
+            identity = None
         if not identity:
-            identity = AnonIdentity(fingerprint=fp)
+            identity = AnonIdentity(fingerprint=token or uuid.uuid4().hex)
             db.session.add(identity)
             db.session.commit()
         session['user_type'] = 'anon'
         session['anon_id'] = f'Anon{identity.id}'
+        session['_anon_fp'] = identity.fingerprint
     elif session.get('user_type') == 'registered' and 'personal_room_id' not in session:
         from auth import _ensure_personal_room
         login = session.get('login')
@@ -144,6 +147,21 @@ def assign_anon_id():
             personal_id = _ensure_personal_room(login)
             session['personal_room_id'] = personal_id
             session.modified = True
+
+
+@app.after_request
+def set_anon_cookie(response):
+    if session.get('user_type') == 'anon' and not request.cookies.get('vsc_anon'):
+        fp = session.get('_anon_fp')
+        if fp:
+            response.set_cookie(
+                'vsc_anon', fp,
+                max_age=365 * 24 * 3600,
+                httponly=True,
+                samesite='Lax',
+                secure=app.config.get('SESSION_COOKIE_SECURE', False),
+            )
+    return response
 
 
 @app.route('/sw.js')
