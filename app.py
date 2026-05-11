@@ -50,6 +50,7 @@ app.register_blueprint(rooms_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
 
 csrf.exempt(api_bp)
+csrf.exempt(auth_bp)  # ВРЕМЕННО для теста
 
 MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
           'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
