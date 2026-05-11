@@ -8,7 +8,24 @@ from flask_session import Session
 from extensions import db, login_manager, csrf
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', uuid.uuid4().hex)
+
+# Постоянный секретный ключ — читается из env или из файла, генерируется один раз
+def _get_secret_key():
+    if os.environ.get('SECRET_KEY'):
+        return os.environ['SECRET_KEY']
+    key_file = os.path.join(os.path.dirname(__file__), '.secret_key')
+    if os.path.exists(key_file):
+        with open(key_file) as f:
+            key = f.read().strip()
+        if key:
+            return key
+    key = uuid.uuid4().hex + uuid.uuid4().hex
+    with open(key_file, 'w') as f:
+        f.write(key)
+    os.chmod(key_file, 0o600)
+    return key
+
+app.secret_key = _get_secret_key()
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=0)

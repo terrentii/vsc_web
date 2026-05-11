@@ -11,6 +11,7 @@ CLAUDE.md
 rooms/
 users/
 flask_session/
+.secret_key
 
 rooms.txt
 inspiration.txt
