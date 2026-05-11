@@ -599,13 +599,15 @@
     .disclaimer-overlay {
       position: absolute; inset: 0;
       background: rgba(6,17,42,.55);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 50; backdrop-filter: blur(2px); padding: 24px;
+      display: flex; align-items: flex-start; justify-content: center;
+      z-index: 50; backdrop-filter: blur(2px);
+      padding: 24px; overflow-y: auto;
     }
     .disclaimer-box {
       background: var(--paper); border: 3px solid var(--mys-ink); border-radius: 0;
       padding: 0 32px 24px; max-width: 460px; width: 100%;
       box-shadow: 12px 12px 0 0 var(--warn); position: relative;
+      margin: auto 0;
     }
     .disclaimer-stripe {
       margin: 0 -32px 22px;

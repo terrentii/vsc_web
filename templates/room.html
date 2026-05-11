@@ -157,6 +157,22 @@
 </div>
 
 <link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
+<!-- Disclaimer must work BEFORE CDN scripts load -->
+<script>
+    function closeDisclaimer() {
+        var overlay = document.getElementById('disclaimer-overlay');
+        if (overlay) overlay.style.display = 'none';
+        try { sessionStorage.setItem('anon_disclaimer_shown', '1'); } catch(e) {}
+    }
+    (function() {
+        try {
+            if (sessionStorage.getItem('anon_disclaimer_shown')) {
+                var overlay = document.getElementById('disclaimer-overlay');
+                if (overlay) overlay.style.display = 'none';
+            }
+        } catch(e) {}
+    })();
+</script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
@@ -397,7 +413,7 @@
     });
 
     // Socket.IO real-time messaging
-    const socket = io({ transports: ['websocket', 'polling'] });
+    const socket = io({ transports: ['polling', 'websocket'] });
 
     socket.on('connect', () => {
         socket.emit('join', { room_id: ROOM_ID });
@@ -570,16 +586,6 @@
             clearUpload();
         }).catch(() => { msgForm.submit(); });
     });
-
-    function closeDisclaimer() {
-        const overlay = document.getElementById('disclaimer-overlay');
-        if (overlay) overlay.style.display = 'none';
-        sessionStorage.setItem('anon_disclaimer_shown', '1');
-    }
-    const discOverlay = document.getElementById('disclaimer-overlay');
-    if (discOverlay && sessionStorage.getItem('anon_disclaimer_shown')) {
-        discOverlay.style.display = 'none';
-    }
 
     document.getElementById('reply-cancel').addEventListener('click', () => {
         document.getElementById('reply_to').value = '';
