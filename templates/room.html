@@ -19,7 +19,7 @@
                 <span class="chat-header-id">{{ room_id }}</span>
             {% endif %}
             <span class="chat-header-spacer"></span>
-            <span class="chat-header-pop">{{ 'Открытая' if config.is_open else 'Закрытая' }}</span>
+            <span class="chat-header-pop" data-short="{{ 'OPN' if config.is_open else 'LCK' }}">{{ 'Открытая' if config.is_open else 'Закрытая' }}</span>
             {% if session.get('user_type') == 'registered' %}
                 {% if config.creator_login == session.get('login') %}
                     <a href="{{ url_for('rooms.manage_room', room_id=room_id) }}" class="btn btn-sm">Управление</a>
