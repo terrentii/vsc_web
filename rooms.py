@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import random
+import threading
 import uuid
 from datetime import datetime
 
@@ -366,7 +367,7 @@ def upload_media(room_id):
     safe_name = uuid.uuid4().hex + '_' + original_name
     file.save(os.path.join(media_dir, safe_name))
 
-    _cleanup_media()
+    threading.Thread(target=_cleanup_media, daemon=True).start()
 
     return jsonify({'ok': True, 'filename': safe_name})
 
