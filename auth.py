@@ -7,7 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
 from models import User, RoomMember
 
-LOGIN_RE = re.compile(r'^[a-zA-Z0-9_]{3,32}$')
+LOGIN_RE = re.compile(r'^[a-zA-Zа-яА-ЯёЁ0-9_]{3,32}$')
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -25,7 +25,7 @@ def register():
         return render_template('register.html', error='Логин и пароль обязательны.')
 
     if not LOGIN_RE.match(login):
-        return render_template('register.html', error='Логин 3–32 символа: только буквы, цифры и _.')
+        return render_template('register.html', error='Логин 3–32 символа: буквы (в т.ч. кириллица), цифры и _.')
 
     if len(password) < 4:
         return render_template('register.html', error='Пароль должен быть не менее 4 символов.')
