@@ -7,6 +7,7 @@ Flask-Login==0.6.3
 Flask-Session==0.8.0
 Flask-SocketIO==5.5.1
 Flask-SQLAlchemy==3.1.1
+eventlet
 simple-websocket==1.1.0
 Flask-WTF==1.2.2
 gunicorn==23.0.0

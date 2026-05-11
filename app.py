@@ -1,3 +1,10 @@
+try:
+    import eventlet
+    eventlet.monkey_patch()
+    _async_mode = 'eventlet'
+except ImportError:
+    _async_mode = 'threading'
+
 import hashlib
 import os
 import re
@@ -61,7 +68,7 @@ Session(app)
 db.init_app(app)
 login_manager.init_app(app)
 csrf.init_app(app)
-socketio.init_app(app, cors_allowed_origins='*', async_mode='threading', manage_session=False)
+socketio.init_app(app, cors_allowed_origins='*', async_mode=_async_mode, manage_session=False)
 
 from auth import auth_bp
 from rooms import rooms_bp, get_room_display_name
