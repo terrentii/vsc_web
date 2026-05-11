@@ -103,7 +103,7 @@
                 </div>
             </form>
 
-            <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+            <div class="manage-danger-zone">
                 <form action="{{ url_for('rooms.delete_room', room_id=room_id) }}" method="post"
                       onsubmit="return confirm('Удалить комнату? Все сообщения будут потеряны.');">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

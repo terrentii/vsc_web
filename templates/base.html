@@ -745,6 +745,7 @@
       border-top: 1.5px dashed var(--hairline);
     }
     .manage-actions .back { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .14em; }
+    .manage-danger-zone { display: flex; justify-content: flex-end; margin-top: 12px; }
 
     /* ── ERROR PAGES ───────────────────────────────────────── */
     .error-page {
@@ -999,6 +1000,17 @@
       .manage-body { padding: 16px 18px; }
       .manage-head .h-title { font-size: 15px; }
       .users-table-wrap { overflow-x: auto; }
+      .manage-actions {
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+      .manage-danger-zone {
+        justify-content: center;
+        margin-top: 4px;
+      }
+      .manage-actions .back,
+      .manage-danger-zone .btn { width: 100%; text-align: center; }
 
       /* Error pages */
       .error-card { padding: 28px 24px; }
