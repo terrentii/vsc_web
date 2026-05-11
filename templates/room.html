@@ -419,11 +419,63 @@
         });
     });
 
-    // Socket.IO real-time messaging
-    const socket = io({ transports: ['polling', 'websocket'] });
+    // Socket.IO real-time messaging (WebSocket only — no HTTP long-poll to avoid browser loading indicator)
+    const socket = io({ transports: ['websocket'], upgrade: false });
+
+    let _wsConnected = false;
+    let _fallbackTimer = null;
+
+    function fetchNewMessages() {
+        fetch('{{ url_for("rooms.poll_messages", room_id=room_id) }}?after=' + msgCount)
+            .then(r => r.ok ? r.json() : [])
+            .then(msgs => {
+                if (!msgs.length) return;
+                const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
+                msgs.forEach(m => {
+                    if (m.index <= msgCount) return;
+                    const noMsgs = document.getElementById('no-msgs');
+                    if (noMsgs) noMsgs.remove();
+                    messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
+                    msgCount = m.index;
+                });
+                bindReply(messagesEl);
+                bindEdit(messagesEl);
+                bindDelete(messagesEl);
+                if (wasAtBottom) scrollBottom();
+            })
+            .catch(() => {});
+    }
+
+    function startFallbackPolling() {
+        if (_fallbackTimer) return;
+        _fallbackTimer = setInterval(fetchNewMessages, 4000);
+    }
+
+    function stopFallbackPolling() {
+        if (_fallbackTimer) { clearInterval(_fallbackTimer); _fallbackTimer = null; }
+    }
+
+    // If WebSocket doesn't connect in 5s — fall back to plain polling (no loading indicator)
+    const _wsTimeout = setTimeout(() => {
+        if (!_wsConnected) startFallbackPolling();
+    }, 5000);
 
     socket.on('connect', () => {
+        _wsConnected = true;
+        clearTimeout(_wsTimeout);
+        stopFallbackPolling();
         socket.emit('join', { room_id: ROOM_ID });
+    });
+
+    socket.on('disconnect', () => {
+        _wsConnected = false;
+        startFallbackPolling();
+    });
+
+    socket.io.on('reconnect', () => {
+        stopFallbackPolling();
+        socket.emit('join', { room_id: ROOM_ID });
+        fetchNewMessages();
     });
 
     socket.on('new_message', m => {
@@ -454,31 +506,6 @@
     socket.on('delete_message', data => {
         const msgEl = document.getElementById('msg-' + data.index);
         if (msgEl) msgEl.remove();
-    });
-
-    // On reconnect, catch up on missed messages
-    let _reconnecting = false;
-    socket.on('disconnect', () => { _reconnecting = true; });
-    socket.io.on('reconnect', () => {
-        socket.emit('join', { room_id: ROOM_ID });
-        fetch('{{ url_for("rooms.poll_messages", room_id=room_id) }}?after=' + msgCount)
-            .then(r => r.ok ? r.json() : [])
-            .then(msgs => {
-                if (!msgs.length) return;
-                const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
-                msgs.forEach(m => {
-                    if (m.index <= msgCount) return;
-                    const noMsgs = document.getElementById('no-msgs');
-                    if (noMsgs) noMsgs.remove();
-                    messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
-                    msgCount = m.index;
-                });
-                bindReply(messagesEl);
-                bindEdit(messagesEl);
-                bindDelete(messagesEl);
-                if (wasAtBottom) scrollBottom();
-            })
-            .catch(() => {});
     });
 
     const msgForm = document.getElementById('msg-form');
