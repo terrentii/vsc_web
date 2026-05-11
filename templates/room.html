@@ -157,8 +157,9 @@
 </div>
 
 <link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
-<!-- Disclaimer must work BEFORE CDN scripts load -->
+<!-- These must work BEFORE CDN scripts load (CDN can be slow on mobile) -->
 <script>
+    // Disclaimer close — works immediately even if socket.io/hljs haven't loaded yet
     function closeDisclaimer() {
         var overlay = document.getElementById('disclaimer-overlay');
         if (overlay) overlay.style.display = 'none';
@@ -171,6 +172,12 @@
                 if (overlay) overlay.style.display = 'none';
             }
         } catch(e) {}
+
+        // Placeholder — set immediately, don't wait for CDN scripts
+        var ta = document.querySelector('.chat-input-text');
+        if (ta && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+            ta.placeholder = ta.getAttribute('data-placeholder-mobile') || 'Сообщение…';
+        }
     })();
 </script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -476,10 +483,6 @@
 
     const msgForm = document.getElementById('msg-form');
     const textInput = msgForm.querySelector('.chat-input-text');
-    (function() {
-        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-        if (isMobile) textInput.placeholder = textInput.dataset.placeholderMobile;
-    })();
     const fileInput = document.getElementById('file-input');
     const attachBtn = document.getElementById('attach-btn');
     const mediaFilename = document.getElementById('media-filename');
