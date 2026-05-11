@@ -28,6 +28,7 @@ app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_DOMAIN'] = None
 
 # CSRF настройки
+app.config['WTF_CSRF_ENABLED'] = True
 app.config['WTF_CSRF_TIME_LIMIT'] = None
 app.config['WTF_CSRF_SSL_STRICT'] = False
 app.config['WTF_CSRF_CHECK_DEFAULT'] = True
@@ -50,7 +51,7 @@ app.register_blueprint(rooms_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
 
 csrf.exempt(api_bp)
-csrf.exempt(auth_bp)  # ВРЕМЕННО для теста
+csrf.exempt(rooms_bp)  
 
 MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
           'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
