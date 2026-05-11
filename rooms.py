@@ -97,6 +97,14 @@ def _track_room(room_id):
     session['visited_rooms'] = visited
     session.modified = True
 
+    # Для зарегистрированных — сохраняем в БД чтобы не терять при сбросе сессии
+    if session.get('user_type') == 'registered':
+        login = session.get('login')
+        if login and not RoomMember.query.filter_by(room_id=room_id, login=login).first():
+            member = RoomMember(room_id=room_id, login=login, role='visitor')
+            db.session.add(member)
+            db.session.commit()
+
 
 def _untrack_room(room_id):
     visited = session.get('visited_rooms', [])
@@ -278,6 +286,8 @@ def post_message(room_id):
             media = ''
     if not text and not media:
         return redirect(url_for('rooms.room', room_id=room_id))
+
+    _track_room(room_id)
 
     reply_to_raw = request.form.get('reply_to', '').strip()
     reply_to = int(reply_to_raw) if reply_to_raw.isdigit() else None
