@@ -118,14 +118,39 @@ def index():
     return render_template('index.html')
 
 
+@app.errorhandler(400)
+def bad_request(e):
+    return render_template('400.html'), 400
+
+
+@app.errorhandler(403)
+def forbidden(e):
+    return render_template('403.html'), 403
+
+
 @app.errorhandler(404)
 def not_found(e):
     return render_template('404.html'), 404
 
 
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return render_template('405.html'), 405
+
+
+@app.errorhandler(413)
+def too_large(e):
+    return render_template('413.html'), 413
+
+
 @app.errorhandler(500)
 def server_error(e):
     return render_template('500.html'), 500
+
+
+@app.errorhandler(503)
+def service_unavailable(e):
+    return render_template('503.html'), 503
 
 
 if __name__ == '__main__':

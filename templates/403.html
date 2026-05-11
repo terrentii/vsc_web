@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}403 — Доступ запрещён{% endblock %}
+
+{% block menubar_route %}
+<span class="slash">/</span><span>__403</span>
+{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-card">
+        <div class="error-stripe">
+            <span>403 forbidden</span>
+            <span>vsc_web · errors</span>
+        </div>
+        <div class="error-code">
+            <span class="accent">403</span>
+            <span class="marker">forbidden</span>
+        </div>
+        <div class="error-title">Доступ запрещён</div>
+        <p class="error-sub">
+            У вас нет прав на просмотр этой страницы. Войдите в аккаунт
+            или обратитесь к прародителю комнаты.
+        </p>
+        <div class="error-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">На главную</a>
+            <a href="{{ url_for('auth.login') }}" class="btn btn-ghost">Войти</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block statusbar_left %}Ошибка 403 · доступ запрещён{% endblock %}
