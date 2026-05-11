@@ -489,22 +489,28 @@
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/room/' + ROOM_ID + '/upload');
         xhr.setRequestHeader('X-CSRFToken', CSRF_TOKEN);
+        xhr.timeout = 5 * 60 * 1000; // 5 минут макс
         xhr.upload.addEventListener('progress', function(e) {
             if (e.lengthComputable) {
+                uploadProgressFill.classList.remove('indeterminate');
                 uploadProgressFill.style.width = Math.round(e.loaded / e.total * 100) + '%';
+            } else {
+                uploadProgressFill.classList.add('indeterminate');
+                uploadProgressFill.style.width = '100%';
             }
         });
+        const onDone = () => { uploadProgress.style.display = 'none'; uploadProgressFill.classList.remove('indeterminate'); };
         xhr.addEventListener('load', function() {
-            uploadProgress.style.display = 'none';
+            onDone();
             try {
                 const data = JSON.parse(xhr.responseText);
                 if (data.ok) { mediaFilename.value = data.filename; }
                 else { clearUpload(); alert(data.error || 'Ошибка загрузки'); }
             } catch(e) { clearUpload(); alert('Ошибка загрузки'); }
         });
-        xhr.addEventListener('error', function() {
-            uploadProgress.style.display = 'none'; clearUpload(); alert('Ошибка загрузки');
-        });
+        xhr.addEventListener('error', function() { onDone(); clearUpload(); alert('Ошибка загрузки'); });
+        xhr.addEventListener('abort', function() { onDone(); clearUpload(); });
+        xhr.addEventListener('timeout', function() { onDone(); clearUpload(); alert('Превышено время загрузки'); });
         xhr.send(fd);
     });
 

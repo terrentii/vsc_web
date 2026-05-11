@@ -587,6 +587,12 @@
     .upload-progress { display: none; padding: 0 18px 6px; background: var(--paper-2); }
     .upload-progress-bar { height: 4px; background: var(--hairline); overflow: hidden; }
     .upload-progress-fill { height: 100%; width: 0%; background: var(--mys-blue); transition: width .2s; }
+    @keyframes progress-pulse {
+        0%   { opacity: 1; }
+        50%  { opacity: .35; }
+        100% { opacity: 1; }
+    }
+    .upload-progress-fill.indeterminate { animation: progress-pulse 1.2s ease-in-out infinite; transition: none; }
 
     /* ── DISCLAIMER OVERLAY ────────────────────────────────── */
     .disclaimer-overlay {
