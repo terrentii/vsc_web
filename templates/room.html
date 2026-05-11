@@ -180,8 +180,6 @@
         }
     })();
 </script>
-<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
-<script src="{{ url_for('static', filename='vendor/highlight.min.js') }}"></script>
 <script>
     const messagesEl = document.getElementById('messages');
     const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
@@ -244,7 +242,7 @@
             } else {
                 const code = parts[i].replace(/^\r?\n/, '').replace(/\r?\n$/, '');
                 let highlighted;
-                try { highlighted = hljs.highlightAuto(code).value; }
+                try { highlighted = (typeof hljs !== 'undefined') ? hljs.highlightAuto(code).value : esc(code); }
                 catch(_) { highlighted = esc(code); }
                 html += '<div class="code-block">' +
                     '<div class="code-block-bar">' +
@@ -402,9 +400,6 @@
     function scrollBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
     scrollBottom();
 
-    // Подсветка кода при загрузке (Jinja-rendered сообщения)
-    messagesEl.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-
     // Копирование кода
     messagesEl.addEventListener('click', function(e) {
         const btn = e.target.closest('.code-copy-btn');
@@ -419,9 +414,8 @@
         });
     });
 
-    // Socket.IO real-time messaging (WebSocket only — no HTTP long-poll to avoid browser loading indicator)
-    const socket = io({ transports: ['websocket', 'polling'] });
-
+    // Socket.IO и highlight.js загружаются динамически ПОСЛЕ load —
+    // браузер не держит полоску загрузки из-за этих файлов
     let _wsConnected = false;
     let _fallbackTimer = null;
 
@@ -455,57 +449,76 @@
         if (_fallbackTimer) { clearInterval(_fallbackTimer); _fallbackTimer = null; }
     }
 
-    // If WebSocket doesn't connect in 5s — fall back to plain polling (no loading indicator)
-    const _wsTimeout = setTimeout(() => {
-        if (!_wsConnected) startFallbackPolling();
-    }, 5000);
+    function initSocket() {
+        const socket = io({ transports: ['websocket', 'polling'] });
 
-    socket.on('connect', () => {
-        _wsConnected = true;
-        clearTimeout(_wsTimeout);
-        stopFallbackPolling();
-        socket.emit('join', { room_id: ROOM_ID });
-    });
+        const _wsTimeout = setTimeout(() => {
+            if (!_wsConnected) startFallbackPolling();
+        }, 5000);
 
-    socket.on('disconnect', () => {
-        _wsConnected = false;
-        startFallbackPolling();
-    });
+        socket.on('connect', () => {
+            _wsConnected = true;
+            clearTimeout(_wsTimeout);
+            stopFallbackPolling();
+            socket.emit('join', { room_id: ROOM_ID });
+        });
 
-    socket.io.on('reconnect', () => {
-        stopFallbackPolling();
-        socket.emit('join', { room_id: ROOM_ID });
-        fetchNewMessages();
-    });
+        socket.on('disconnect', () => {
+            _wsConnected = false;
+            startFallbackPolling();
+        });
 
-    socket.on('new_message', m => {
-        if (m.index <= msgCount) return;
-        const noMsgs = document.getElementById('no-msgs');
-        if (noMsgs) noMsgs.remove();
-        const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
-        messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
-        msgCount = m.index;
-        notifyNewMsg(m);
-        bindReply(messagesEl);
-        bindEdit(messagesEl);
-        bindDelete(messagesEl);
-        if (wasAtBottom) scrollBottom();
-    });
+        socket.io.on('reconnect', () => {
+            stopFallbackPolling();
+            socket.emit('join', { room_id: ROOM_ID });
+            fetchNewMessages();
+        });
 
-    socket.on('edit_message', data => {
-        const msgEl = document.getElementById('msg-' + data.index);
-        if (msgEl) {
-            const textEl = msgEl.querySelector('.msg-text');
-            if (textEl) {
-                textEl.dataset.raw = data.text;
-                textEl.innerHTML = renderText(data.text);
+        socket.on('new_message', m => {
+            if (m.index <= msgCount) return;
+            const noMsgs = document.getElementById('no-msgs');
+            if (noMsgs) noMsgs.remove();
+            const wasAtBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
+            messagesEl.insertAdjacentHTML('beforeend', renderMsg(m));
+            msgCount = m.index;
+            notifyNewMsg(m);
+            bindReply(messagesEl);
+            bindEdit(messagesEl);
+            bindDelete(messagesEl);
+            if (wasAtBottom) scrollBottom();
+        });
+
+        socket.on('edit_message', data => {
+            const msgEl = document.getElementById('msg-' + data.index);
+            if (msgEl) {
+                const textEl = msgEl.querySelector('.msg-text');
+                if (textEl) {
+                    textEl.dataset.raw = data.text;
+                    textEl.innerHTML = renderText(data.text);
+                }
             }
-        }
-    });
+        });
 
-    socket.on('delete_message', data => {
-        const msgEl = document.getElementById('msg-' + data.index);
-        if (msgEl) msgEl.remove();
+        socket.on('delete_message', data => {
+            const msgEl = document.getElementById('msg-' + data.index);
+            if (msgEl) msgEl.remove();
+        });
+    }
+
+    function loadScript(src, onload) {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = onload;
+        document.head.appendChild(s);
+    }
+
+    window.addEventListener('load', function() {
+        // Highlight.js — подсветка кода
+        loadScript('{{ url_for("static", filename="vendor/highlight.min.js") }}', function() {
+            messagesEl.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+        });
+        // Socket.IO — реалтайм
+        loadScript('{{ url_for("static", filename="vendor/socket.io.min.js") }}', initSocket);
     });
 
     const msgForm = document.getElementById('msg-form');
