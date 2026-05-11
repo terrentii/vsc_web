@@ -131,9 +131,17 @@ def post_message(room_id):
     if not text:
         return jsonify({'error': 'text is required'}), 400
 
+    # X-Bot-Author позволяет боту указать имя отправителя
+    # Доступно только при авторизации через API-ключ
+    bot_author = request.headers.get('X-Bot-Author', '').strip()[:64]
+    if bot_author and _resolve_api_key():
+        author = bot_author
+    else:
+        author = caller
+
     msg = Message(
         room_id=room_id,
-        author=caller,
+        author=author,
         text=text,
         timestamp=datetime.utcnow(),
     )
@@ -144,7 +152,7 @@ def post_message(room_id):
     msg_index = Message.query.filter_by(room_id=room_id).order_by(Message.id).count()
     socketio.emit('new_message', {
         'index': msg_index,
-        'author': caller,
+        'author': author,
         'timestamp': msg.timestamp.isoformat(),
         'text': text,
         'reply_to': '',
