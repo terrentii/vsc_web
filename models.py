@@ -57,3 +57,11 @@ class RoomMember(db.Model):
     role = db.Column(db.String(20), default='member', nullable=False)
 
     __table_args__ = (db.UniqueConstraint('room_id', 'login', name='uq_room_member'),)
+
+
+class AnonIdentity(db.Model):
+    __tablename__ = 'anon_identities'
+
+    id          = db.Column(db.Integer, primary_key=True)  # и есть номер анона
+    fingerprint = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    first_seen  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

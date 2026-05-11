@@ -214,6 +214,28 @@
     }
     .error-msg::before { content: '!'; background: var(--warn); color: #fff; padding: 0 8px; font-weight: 700; }
 
+    .conflict-msg {
+      border: 2px solid var(--mys-ink);
+      margin-bottom: 14px;
+      box-shadow: 4px 4px 0 0 var(--warn);
+    }
+    .conflict-label {
+      background: var(--mys-ink); color: var(--warn);
+      font-family: var(--font-mono); font-size: 10px;
+      font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+      padding: 5px 12px;
+    }
+    .conflict-name {
+      font-family: var(--font-mono); font-size: 22px; font-weight: 700;
+      color: var(--warn); padding: 10px 14px 4px;
+      letter-spacing: -.01em; text-decoration: line-through;
+    }
+    .conflict-reason {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--muted); padding: 0 14px 10px;
+      text-transform: uppercase; letter-spacing: .08em;
+    }
+
     a { color: var(--mys-blue); text-decoration: none; border-bottom: 1px solid var(--mys-blue); }
     a:hover { color: var(--mys-blue-deep); border-bottom-color: var(--mys-blue-deep); cursor: pointer; }
 
@@ -851,6 +873,9 @@
     .theme-dark a { color: var(--mys-blue); border-bottom-color: var(--mys-blue); }
     .theme-dark a:hover { color: #fff; border-bottom-color: #fff; }
     .theme-dark .error-msg { background: rgba(218,68,83,.12); }
+    .theme-dark .conflict-msg { border-color: var(--mys-ink); }
+    .theme-dark .conflict-label { background: var(--paper-2); }
+    .theme-dark .conflict-reason { color: #fff; }
     .theme-dark .disclaimer-overlay { background: rgba(0,0,0,.65); }
     .theme-dark .disclaimer-box { background: var(--paper); }
     .theme-dark .disclaimer-stripe { background: var(--warn); border-bottom-color: var(--mys-ink); }
@@ -1019,7 +1044,7 @@
         <span><span class="dot"></span>{% block statusbar_left %}Готово{% endblock %}</span>
         <span class="statusbar-right">
             <span class="statusbar-meta">{% block statusbar_right %}TZ Europe/Moscow{% endblock %}</span>
-            <span class="statusbar-meta">build 1.4.2</span>
+            <span class="statusbar-meta">build 1.4.3</span>
         </span>
     </div>
 </div>

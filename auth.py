@@ -8,6 +8,7 @@ from extensions import db
 from models import User, RoomMember
 
 LOGIN_RE = re.compile(r'^[a-zA-Zа-яА-ЯёЁ0-9_]{3,32}$')
+ANON_RE  = re.compile(r'^[Aa]non\d+$')
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -27,6 +28,9 @@ def register():
     if not LOGIN_RE.match(login):
         return render_template('register.html', error='Логин 3–32 символа: буквы (в т.ч. кириллица), цифры и _.')
 
+    if ANON_RE.match(login):
+        return render_template('register.html', error='Этот логин зарезервирован для анонимных пользователей.', conflict=login)
+
     if len(password) < 4:
         return render_template('register.html', error='Пароль должен быть не менее 4 символов.')
 
@@ -34,7 +38,7 @@ def register():
         return render_template('register.html', error='Пароли не совпадают.')
 
     if User.query.filter_by(login=login).first():
-        return render_template('register.html', error='Этот логин уже занят.')
+        return render_template('register.html', error='Этот логин уже занят.', conflict=login)
 
     user = User(login=login, password_hash=generate_password_hash(password))
     db.session.add(user)
