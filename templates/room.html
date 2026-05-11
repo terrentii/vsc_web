@@ -156,8 +156,8 @@
     </div>
 </div>
 
-<link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
-<!-- These must work BEFORE CDN scripts load (CDN can be slow on mobile) -->
+<link id="hljs-theme" rel="stylesheet" href="{{ url_for('static', filename='vendor/atom-one-light.min.css') }}">
+<!-- These must work BEFORE external scripts load -->
 <script>
     // Disclaimer close — works immediately even if socket.io/hljs haven't loaded yet
     function closeDisclaimer() {
@@ -180,8 +180,8 @@
         }
     })();
 </script>
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/highlight.min.js') }}"></script>
 <script>
     const messagesEl = document.getElementById('messages');
     const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
