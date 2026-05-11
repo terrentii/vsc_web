@@ -121,7 +121,9 @@
             <div class="chat-input">
                 <button type="button" class="attach-btn" id="attach-btn" title="Прикрепить файл">📎</button>
                 <textarea class="chat-input-text" name="text" rows="1"
-                          placeholder="Сообщение или файл… (Shift+Enter — новая строка)" autocomplete="off"></textarea>
+                          placeholder="Сообщение или файл… (Shift+Enter — новая строка)"
+                          data-placeholder-mobile="Сообщение…"
+                          autocomplete="off"></textarea>
                 <button class="btn btn-primary" type="submit">Отправить ↵</button>
             </div>
         </form>
@@ -456,6 +458,14 @@
 
     const msgForm = document.getElementById('msg-form');
     const textInput = msgForm.querySelector('.chat-input-text');
+    (function() {
+        const full = textInput.placeholder;
+        const short = textInput.dataset.placeholderMobile;
+        const mq = window.matchMedia('(max-width: 600px)');
+        const update = () => { textInput.placeholder = mq.matches ? short : full; };
+        mq.addEventListener('change', update);
+        update();
+    })();
     const fileInput = document.getElementById('file-input');
     const attachBtn = document.getElementById('attach-btn');
     const mediaFilename = document.getElementById('media-filename');
