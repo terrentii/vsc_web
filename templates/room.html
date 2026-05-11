@@ -420,7 +420,7 @@
     });
 
     // Socket.IO real-time messaging (WebSocket only — no HTTP long-poll to avoid browser loading indicator)
-    const socket = io({ transports: ['websocket'], upgrade: false });
+    const socket = io({ transports: ['websocket', 'polling'] });
 
     let _wsConnected = false;
     let _fallbackTimer = null;
