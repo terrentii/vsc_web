@@ -59,7 +59,7 @@
                         </a>
                         {% endif %}
                     {% endif %}
-                    <div class="msg-text">{{ msg.text }}</div>
+                    <div class="msg-text" data-raw="{{ msg.text | e }}">{{ msg.text | render_text }}</div>
                     {% set media_file = msg.media or '' %}
                     {% if media_file %}
                     <div class="msg-media">
@@ -120,8 +120,8 @@
             </div>
             <div class="chat-input">
                 <button type="button" class="attach-btn" id="attach-btn" title="Прикрепить файл">📎</button>
-                <input class="chat-input-text" type="text" name="text"
-                       placeholder="Сообщение или файл…" autocomplete="off">
+                <textarea class="chat-input-text" name="text" rows="1"
+                          placeholder="Сообщение или файл… (Shift+Enter — новая строка)" autocomplete="off"></textarea>
                 <button class="btn btn-primary" type="submit">Отправить ↵</button>
             </div>
         </form>
@@ -152,7 +152,9 @@
     </div>
 </div>
 
+<link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
     const messagesEl = document.getElementById('messages');
     const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
@@ -206,6 +208,32 @@
         return d.innerHTML;
     }
 
+    function renderText(rawText) {
+        const parts = rawText.split(/```([\s\S]*?)```/);
+        let html = '';
+        for (let i = 0; i < parts.length; i++) {
+            if (i % 2 === 0) {
+                html += esc(parts[i]).replace(/\n/g, '<br>');
+            } else {
+                const code = parts[i].replace(/^\r?\n/, '').replace(/\r?\n$/, '');
+                let highlighted;
+                try { highlighted = hljs.highlightAuto(code).value; }
+                catch(_) { highlighted = esc(code); }
+                html += '<div class="code-block">' +
+                    '<div class="code-block-bar">' +
+                        '<span class="code-block-label-wrap">' +
+                            '<span class="code-block-stripes">////</span>' +
+                            '<span class="code-block-label">code</span>' +
+                        '</span>' +
+                        '<button class="code-copy-btn" type="button">Копировать</button>' +
+                    '</div>' +
+                    '<pre class="code-pre"><code class="hljs">' + highlighted + '</code></pre>' +
+                    '</div>';
+            }
+        }
+        return html;
+    }
+
     const IMAGE_EXTS = ['png','jpg','jpeg','gif','webp','svg'];
     const VIDEO_EXTS = ['mp4','webm','mov'];
 
@@ -247,7 +275,7 @@
                 '<span class="msg-time">' + formatTs(m.timestamp) + '</span>' +
             '</div>' +
             replyHtml +
-            '<div class="msg-text">' + esc(m.text) + '</div>' +
+            '<div class="msg-text" data-raw="' + esc(m.text) + '">' + renderText(m.text) + '</div>' +
             mediaHtml(m.media) +
             '<span class="msg-actions">' + editBtn +
                 '<button type="button" class="reply-btn" data-index="' + m.index + '" data-author="' + esc(m.author) + '">Ответить</button>' +
@@ -274,22 +302,28 @@
                 const msgEl = document.getElementById('msg-' + btn.dataset.index);
                 const textEl = msgEl.querySelector('.msg-text');
                 if (msgEl.querySelector('.edit-input')) return;
-                const original = textEl.textContent;
+                const original = textEl.dataset.raw || textEl.textContent;
                 textEl.style.display = 'none';
                 const wrap = document.createElement('div');
                 wrap.className = 'edit-input';
-                wrap.style.cssText = 'display:flex;gap:6px;align-items:center;margin-top:4px;';
-                wrap.innerHTML =
-                    '<input type="text" value="' + esc(original) + '" style="flex:1;padding:8px 12px;border:1.5px solid var(--mys-ink);font-size:13px;outline:none;">' +
-                    '<button class="btn btn-primary btn-sm">Сохранить</button>' +
-                    '<button class="btn btn-sm edit-cancel">Отмена</button>';
+                wrap.style.cssText = 'display:flex;gap:6px;align-items:flex-end;margin-top:4px;';
+                const ta = document.createElement('textarea');
+                ta.value = original;
+                ta.style.cssText = 'flex:1;padding:8px 12px;border:1.5px solid var(--mys-ink);font-size:13px;outline:none;resize:none;overflow-y:hidden;font-family:inherit;line-height:1.4;min-height:36px;max-height:160px;box-sizing:border-box;';
+                const btnSave = document.createElement('button');
+                btnSave.className = 'btn btn-primary btn-sm'; btnSave.textContent = 'Сохранить';
+                const btnCancel = document.createElement('button');
+                btnCancel.className = 'btn btn-sm edit-cancel'; btnCancel.textContent = 'Отмена';
+                wrap.append(ta, btnSave, btnCancel);
                 textEl.insertAdjacentElement('afterend', wrap);
-                const input = wrap.querySelector('input');
-                input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+                const autosize = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; };
+                ta.addEventListener('input', autosize);
+                autosize();
+                ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
                 const cancel = () => { wrap.remove(); textEl.style.display = ''; };
-                wrap.querySelector('.edit-cancel').addEventListener('click', cancel);
+                btnCancel.addEventListener('click', cancel);
                 const save = () => {
-                    const newText = input.value.trim();
+                    const newText = ta.value.trim();
                     if (!newText) return;
                     fetch('/room/' + ROOM_ID + '/message/' + btn.dataset.index + '/edit', {
                         method: 'POST',
@@ -300,12 +334,16 @@
                         },
                         body: 'text=' + encodeURIComponent(newText)
                     }).then(r => r.json()).then(data => {
-                        if (data.ok) { textEl.textContent = data.text; wrap.remove(); textEl.style.display = ''; }
+                        if (data.ok) {
+                            textEl.dataset.raw = data.text;
+                            textEl.innerHTML = renderText(data.text);
+                            wrap.remove(); textEl.style.display = '';
+                        }
                     });
                 };
-                wrap.querySelector('.btn.btn-primary').addEventListener('click', save);
-                input.addEventListener('keydown', e => {
-                    if (e.key === 'Enter') { e.preventDefault(); save(); }
+                btnSave.addEventListener('click', save);
+                ta.addEventListener('keydown', e => {
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
                     if (e.key === 'Escape') cancel();
                 });
             });
@@ -337,6 +375,23 @@
     function scrollBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
     scrollBottom();
 
+    // Подсветка кода при загрузке (Jinja-rendered сообщения)
+    messagesEl.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+
+    // Копирование кода
+    messagesEl.addEventListener('click', function(e) {
+        const btn = e.target.closest('.code-copy-btn');
+        if (!btn) return;
+        const code = btn.closest('.code-block').querySelector('code').textContent;
+        navigator.clipboard.writeText(code).then(() => {
+            btn.textContent = 'Скопировано!';
+            setTimeout(() => btn.textContent = 'Копировать', 2000);
+        }).catch(() => {
+            btn.textContent = 'Ошибка';
+            setTimeout(() => btn.textContent = 'Копировать', 2000);
+        });
+    });
+
     // Socket.IO real-time messaging
     const socket = io({ transports: ['websocket', 'polling'] });
 
@@ -362,7 +417,10 @@
         const msgEl = document.getElementById('msg-' + data.index);
         if (msgEl) {
             const textEl = msgEl.querySelector('.msg-text');
-            if (textEl) textEl.textContent = data.text;
+            if (textEl) {
+                textEl.dataset.raw = data.text;
+                textEl.innerHTML = renderText(data.text);
+            }
         }
     });
 
@@ -448,6 +506,18 @@
 
     document.getElementById('upload-cancel').addEventListener('click', clearUpload);
 
+    textInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            msgForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        }
+    });
+
+    textInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 160) + 'px';
+    });
+
     msgForm.addEventListener('submit', function(e) {
         e.preventDefault();
         const text = textInput.value.trim();
@@ -463,6 +533,7 @@
             body: formData
         }).then(() => {
             textInput.value = '';
+            textInput.style.height = 'auto';
             document.getElementById('reply_to').value = '';
             document.getElementById('reply-preview').style.display = 'none';
             clearUpload();

@@ -1,10 +1,12 @@
 import hashlib
 import os
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 
 from flask import Flask, render_template, request, session, send_from_directory
 from flask_session import Session
+from markupsafe import Markup, escape as html_escape
 
 from extensions import db, login_manager, csrf, socketio
 
@@ -103,6 +105,32 @@ def format_ts(value):
     if (today_msk - d).days == 1:
         return f'вчера {time_str}'
     return f'{d.day} {MONTHS[d.month - 1]} {time_str}'
+
+
+@app.template_filter('render_text')
+def render_text_filter(text):
+    """Рендерит текст: ```код``` → блок кода, \n → <br>."""
+    parts = re.split(r'```([\s\S]*?)```', text or '')
+    result = []
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            result.append(str(html_escape(part)).replace('\n', '<br>'))
+        else:
+            code = re.sub(r'^\r?\n', '', re.sub(r'\r?\n$', '', part))
+            escaped = str(html_escape(code))
+            result.append(
+                '<div class="code-block">'
+                '<div class="code-block-bar">'
+                '<span class="code-block-label-wrap">'
+                '<span class="code-block-stripes">////</span>'
+                '<span class="code-block-label">code</span>'
+                '</span>'
+                '<button class="code-copy-btn" type="button">Копировать</button>'
+                '</div>'
+                f'<pre class="code-pre"><code>{escaped}</code></pre>'
+                '</div>'
+            )
+    return Markup(''.join(result))
 
 
 def get_room_info(room_id):

@@ -286,7 +286,7 @@ def post_message(room_id):
     if not _can_access_room(room_id):
         return redirect(url_for('index'))
 
-    text = request.form.get('text', '').strip()[:4000]
+    text = re.sub(r'\n{6,}', '\n\n\n\n\n', request.form.get('text', '').strip())[:4000]
     media = request.form.get('media', '').strip()
     # Разрешаем только имя файла без пути — только файлы этой комнаты
     if media:

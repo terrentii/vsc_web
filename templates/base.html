@@ -428,6 +428,44 @@
     .msg-media-link:hover { background: var(--mys-ink); color: var(--paper); border-bottom: none; }
     .msg-media-link .clip { color: var(--mys-blue); }
 
+    /* ── CODE BLOCKS ───────────────────────────────────────────── */
+    .code-block {
+        border: 1.5px solid var(--mys-ink); margin: 8px 0;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 12px; overflow: hidden;
+    }
+    .code-block-bar {
+        background: var(--paper-2); padding: 5px 10px;
+        display: flex; align-items: center; justify-content: space-between;
+        border-bottom: 1.5px solid var(--mys-ink);
+        color: #000;
+    }
+    .code-block-label-wrap { display: flex; align-items: center; gap: 8px; }
+    .code-block-stripes {
+        font-family: var(--font-mono); font-size: 12px;
+        color: currentColor; letter-spacing: .05em;
+    }
+    .code-block-label {
+        font-family: var(--font-mono); font-size: 10px;
+        color: currentColor; letter-spacing: .15em;
+        text-transform: uppercase; font-weight: 400;
+    }
+    .code-copy-btn {
+        background: none; border: 1px solid currentColor; color: currentColor;
+        font-size: 10px; padding: 2px 10px; cursor: pointer; opacity: 0.6;
+        font-family: var(--font-mono); letter-spacing: .08em; border-radius: 0;
+        text-transform: uppercase;
+    }
+    .code-copy-btn:hover { opacity: 1; }
+    .code-pre {
+        margin: 0; padding: 12px 16px; overflow-x: auto;
+        background: var(--paper-2); line-height: 1.5;
+    }
+    .code-pre code.hljs { background: none; padding: 0; font-size: 12px; }
+    .theme-dark .code-block-bar { color: #f3f3f1; border-bottom-color: rgba(243,243,241,.15); }
+    .theme-dark .code-block { border-color: rgba(243,243,241,.15); }
+    .theme-dark .code-pre { background: #0d1120; }
+
     .day-divider {
       display: flex; align-items: center; gap: 14px;
       padding: 18px 0 12px;
@@ -539,6 +577,8 @@
       border: 1.5px solid var(--mys-ink); border-radius: 0;
       font-size: 13px; background: #fff;
       font-family: var(--font-system);
+      resize: none; overflow-y: hidden; line-height: 1.4;
+      min-height: 44px; max-height: 160px; box-sizing: border-box;
     }
     .chat-input-text:focus { box-shadow: 4px 4px 0 0 var(--mys-blue); transform: translate(-1px,-1px); }
     .chat-input .btn { padding: 0 22px; }
@@ -1095,6 +1135,12 @@
         icon.textContent = t === 'dark' ? '☀' : '☾';
         label.textContent = t === 'dark' ? 'Light' : 'Dark';
         try { localStorage.setItem('mys-theme', t); } catch(e) {}
+        const hljsTheme = document.getElementById('hljs-theme');
+        if (hljsTheme) {
+            hljsTheme.href = t === 'dark'
+                ? 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css'
+                : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css';
+        }
     }
     applyTheme(theme);
 
