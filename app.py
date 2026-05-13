@@ -79,7 +79,6 @@ app.register_blueprint(rooms_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
 
 csrf.exempt(api_bp)
-csrf.exempt(rooms_bp)  
 
 MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
           'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
@@ -248,4 +247,4 @@ if __name__ == '__main__':
     os.makedirs('rooms', exist_ok=True)
     with app.app_context():
         db.create_all()
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=False)

@@ -13,7 +13,7 @@ DELETE /api/keys/<int:key_id>     — удалить ключ
 """
 import hashlib
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request, session
 
@@ -145,7 +145,7 @@ def post_message(room_id):
         room_id=room_id,
         author=author,
         text=text,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
         media=media if media else None,
     )
     db.session.add(msg)

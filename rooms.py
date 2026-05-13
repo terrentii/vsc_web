@@ -4,7 +4,7 @@ import shutil
 import random
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_from_directory
 from flask_socketio import join_room as sio_join_room, emit as sio_emit
@@ -31,7 +31,6 @@ ALLOWED_MIMES = {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/octet-stream',  # бинарные файлы без определённого типа
 }
 
 
@@ -145,7 +144,7 @@ def create_room():
 
     login = session['login']
     room_id = _generate_room_id()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     room = Room(room_id=room_id, name='', is_open=True, created_at=now, creator_login=login)
     db.session.add(room)
@@ -253,14 +252,14 @@ def poll_messages(room_id):
     after = request.args.get('after', '0')
     after = int(after) if after.isdigit() else 0
 
-    messages = Message.query.filter_by(room_id=room_id).order_by(Message.id).all()
-    total = len(messages)
+    base_q = Message.query.filter_by(room_id=room_id).order_by(Message.id)
+    total = base_q.count()
+    new_messages = base_q.offset(after).all()
 
     new_msgs = []
-    for i in range(after, total):
-        msg = messages[i]
+    for i, msg in enumerate(new_messages):
         entry = {
-            'index': i + 1,
+            'index': after + i + 1,
             'author': msg.author,
             'timestamp': msg.timestamp.isoformat(),
             'text': msg.text,
@@ -271,8 +270,10 @@ def poll_messages(room_id):
         if rt:
             ri = int(rt)
             if 0 < ri <= total:
-                entry['reply_author'] = messages[ri - 1].author
-                entry['reply_text'] = messages[ri - 1].text[:60]
+                reply_msg = base_q.offset(ri - 1).first()
+                if reply_msg:
+                    entry['reply_author'] = reply_msg.author
+                    entry['reply_text'] = reply_msg.text[:60]
         new_msgs.append(entry)
 
     return jsonify(new_msgs)
@@ -312,7 +313,7 @@ def post_message(room_id):
         room_id=room_id,
         author=author,
         text=text,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
         reply_to=reply_to,
         media=media or None,
     )
@@ -357,7 +358,7 @@ def upload_media(room_id):
         return jsonify({'ok': False, 'error': 'No file'}), 400
 
     content_type = (file.content_type or '').split(';')[0].strip()
-    if content_type and content_type != 'application/octet-stream' and content_type not in ALLOWED_MIMES:
+    if content_type and content_type not in ALLOWED_MIMES:
         return jsonify({'ok': False, 'error': f'Тип файла не разрешён: {content_type}'}), 415
 
     media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
