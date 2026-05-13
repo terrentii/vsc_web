@@ -128,8 +128,10 @@ def post_message(room_id):
 
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()[:4000]
-    if not text:
-        return jsonify({'error': 'text is required'}), 400
+    media = (data.get('media') or '').strip()[:256]
+
+    if not text and not media:
+        return jsonify({'error': 'text or media is required'}), 400
 
     # X-Bot-Author позволяет боту указать имя отправителя
     # Доступно только при авторизации через API-ключ
@@ -144,6 +146,7 @@ def post_message(room_id):
         author=author,
         text=text,
         timestamp=datetime.utcnow(),
+        media=media if media else None,
     )
     db.session.add(msg)
     db.session.commit()
@@ -156,10 +159,11 @@ def post_message(room_id):
         'timestamp': msg.timestamp.isoformat(),
         'text': text,
         'reply_to': '',
-        'media': '',
+        'media': media,
+        'room_id': room_id,
     }, room=room_id)
 
-    return jsonify({'ok': True, 'id': msg.id, 'author': caller, 'text': text}), 201
+    return jsonify({'ok': True, 'id': msg.id, 'author': author, 'text': text, 'media': media}), 201
 
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
