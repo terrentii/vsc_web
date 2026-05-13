@@ -43,6 +43,22 @@
                     </div>
                 </div>
 
+                <div class="manage-section-title" id="tg-section"
+                     style="{{ 'display:none' if not config.is_open else '' }}">
+                    <span>Телеграм-бот</span>
+                </div>
+                <div id="tg-row" style="{{ 'display:none' if not config.is_open else '' }}; margin-bottom:18px;">
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-family:var(--font-mono);font-size:12px;">
+                        <input type="checkbox" name="tg_visible" id="tg_visible"
+                               {{ 'checked' if config.tg_visible else '' }}
+                               style="width:16px;height:16px;cursor:pointer;">
+                        Показывать комнату в Telegram-боте
+                    </label>
+                    <p style="margin-top:6px;font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:.04em;">
+                        Только открытые комнаты могут быть видны боту. При переключении в закрытую галочка сбрасывается.
+                    </p>
+                </div>
+
                 <div class="manage-section-title">
                     <span>Пользователи</span>
                     <span class="count">{{ users | length }} учёт.</span>
@@ -116,3 +132,21 @@
 {% endblock %}
 
 {% block statusbar_left %}Управление комнатой {{ room_id }}{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var sel = document.querySelector('select[name="is_open"]');
+    var tgSection = document.getElementById('tg-section');
+    var tgRow = document.getElementById('tg-row');
+    var tgCb = document.getElementById('tg_visible');
+    function update() {
+        var isOpen = sel.value === 'true';
+        tgSection.style.display = isOpen ? '' : 'none';
+        tgRow.style.display = isOpen ? '' : 'none';
+        if (!isOpen) tgCb.checked = false;
+    }
+    sel.addEventListener('change', update);
+})();
+</script>
+{% endblock %}

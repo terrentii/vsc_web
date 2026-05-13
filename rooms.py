@@ -343,6 +343,7 @@ def post_message(room_id):
         'text': msg.text,
         'reply_to': str(msg.reply_to) if msg.reply_to else '',
         'media': msg.media or '',
+        'room_id': room_id,
     }
     if entry['reply_to']:
         ri = int(entry['reply_to'])
@@ -512,6 +513,11 @@ def manage_room(room_id):
 
     room.is_open = request.form.get('is_open', 'true') == 'true'
     room.name = request.form.get('room_name', '').strip()[:64]
+    # tg_visible только для открытых комнат; при переключении в закрытую — сбрасываем
+    if room.is_open:
+        room.tg_visible = request.form.get('tg_visible') == 'on'
+    else:
+        room.tg_visible = False
 
     add_user = request.form.get('add_user', '').strip()
     if add_user and not RoomMember.query.filter_by(room_id=room_id, login=add_user).first():

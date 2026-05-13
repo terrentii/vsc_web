@@ -94,6 +94,19 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
 
+# Автоматическая миграция при старте (idempotent, работает и под gunicorn).
+with app.app_context():
+    try:
+        from sqlalchemy import text, inspect as sa_inspect
+        insp = sa_inspect(db.engine)
+        existing_cols = {c['name'] for c in insp.get_columns('rooms')}
+        if 'tg_visible' not in existing_cols:
+            with db.engine.connect() as _conn:
+                _conn.execute(text('ALTER TABLE rooms ADD COLUMN tg_visible BOOLEAN NOT NULL DEFAULT 0'))
+                _conn.commit()
+    except Exception:
+        pass  # таблица ещё не создана — create_all создаст с нужной колонкой
+
 # Освобождаем blueprint от автоматической CSRF-проверки.
 # Внутри api.py сами вызываем csrf.protect() для эндпоинтов, использующих
 # session-cookie, и пропускаем проверку только когда есть валидный X-Api-Key.
