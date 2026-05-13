@@ -343,6 +343,7 @@ def post_message(room_id):
         'text': msg.text,
         'reply_to': str(msg.reply_to) if msg.reply_to else '',
         'media': msg.media or '',
+        'room_id': room_id,
     }
     if entry['reply_to']:
         ri = int(entry['reply_to'])
