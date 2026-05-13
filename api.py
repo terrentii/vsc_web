@@ -12,10 +12,14 @@ DELETE /api/keys/<int:key_id>     — удалить ключ
 Аутентификация: заголовок X-Api-Key: vsc_<token>
 """
 import hashlib
+import os
 import secrets
+import threading
+import uuid
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request, session
+from werkzeug.utils import secure_filename
 from flask_wtf.csrf import validate_csrf, CSRFError
 from wtforms.validators import ValidationError
 
@@ -220,6 +224,46 @@ def post_message(room_id):
     }, room=room_id)
 
     return jsonify({'ok': True, 'id': msg.id, 'author': author, 'text': text, 'media': media}), 201
+
+
+# ── Media upload ──────────────────────────────────────────────────────────────
+
+@api_bp.route('/room/<room_id>/upload', methods=['POST'])
+def api_upload_media(room_id):
+    """Загрузка файла в комнату через API-ключ (без CSRF)."""
+    if not _resolve_api_key():
+        return jsonify({'error': 'API key required'}), 401
+
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room:
+        return jsonify({'error': 'Room not found'}), 404
+
+    caller = _get_caller()
+    if not _can_access(room, caller):
+        return jsonify({'error': 'Access denied'}), 403
+
+    from rooms import EXT_TO_MIME, ROOMS_DIR, _cleanup_media
+
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return jsonify({'error': 'No file'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if not EXT_TO_MIME.get(ext):
+        return jsonify({'error': f'Extension not allowed: .{ext}'}), 415
+
+    media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
+    os.makedirs(media_dir, exist_ok=True)
+
+    original_name = secure_filename(file.filename) or 'file'
+    safe_name = uuid.uuid4().hex + '_' + original_name
+    if not safe_name.lower().endswith('.' + ext):
+        safe_name += '.' + ext
+
+    file.save(os.path.join(media_dir, safe_name))
+    threading.Thread(target=_cleanup_media, daemon=True).start()
+
+    return jsonify({'ok': True, 'filename': safe_name})
 
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
