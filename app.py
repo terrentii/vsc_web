@@ -6,8 +6,10 @@ except ImportError:
     _async_mode = 'threading'
 
 import hashlib
+import hmac
 import os
 import re
+import secrets
 import uuid
 from datetime import datetime, timezone, timedelta
 
@@ -37,8 +39,12 @@ def _get_secret_key():
 
 app.secret_key = _get_secret_key()
 
-from werkzeug.middleware.proxy_fix import ProxyFix
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=0)
+# ProxyFix должен работать ТОЛЬКО когда приложение реально за реверс-прокси,
+# иначе атакующий подделает X-Forwarded-For и обойдёт rate limit по IP.
+# Включаем через env BEHIND_PROXY=1.
+if os.environ.get('BEHIND_PROXY', '').strip() in ('1', 'true', 'yes', 'on'):
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=0)
 
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 ** 3  # 5 GB
 
@@ -57,7 +63,10 @@ app.config['SESSION_COOKIE_DOMAIN'] = None
 # CSRF настройки
 app.config['WTF_CSRF_ENABLED'] = True
 app.config['WTF_CSRF_TIME_LIMIT'] = None
-app.config['WTF_CSRF_SSL_STRICT'] = False
+# Включаем строгую проверку Referer на HTTPS — закрывает class CSRF-атак
+# через mixed-content и подделанные origin'ы. Отключить только если фронт
+# и бэк на разных origins без CORS-кооперации.
+app.config['WTF_CSRF_SSL_STRICT'] = True
 app.config['WTF_CSRF_CHECK_DEFAULT'] = True
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
@@ -68,7 +77,14 @@ Session(app)
 db.init_app(app)
 login_manager.init_app(app)
 csrf.init_app(app)
-socketio.init_app(app, cors_allowed_origins='*', async_mode=_async_mode, manage_session=False)
+# CORS для Socket.IO: по умолчанию same-origin only (cors_allowed_origins=None).
+# Можно явно расширить через env ALLOWED_ORIGINS="https://example.com,https://x.com".
+_socket_origins_env = os.environ.get('ALLOWED_ORIGINS', '').strip()
+if _socket_origins_env:
+    _socket_origins = [o.strip() for o in _socket_origins_env.split(',') if o.strip()]
+else:
+    _socket_origins = None  # same-origin only (защита от cross-site WebSocket hijacking)
+socketio.init_app(app, cors_allowed_origins=_socket_origins, async_mode=_async_mode, manage_session=False)
 
 from auth import auth_bp
 from rooms import rooms_bp, get_room_display_name
@@ -78,6 +94,9 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
 
+# Освобождаем blueprint от автоматической CSRF-проверки.
+# Внутри api.py сами вызываем csrf.protect() для эндпоинтов, использующих
+# session-cookie, и пропускаем проверку только когда есть валидный X-Api-Key.
 csrf.exempt(api_bp)
 
 MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
@@ -153,8 +172,27 @@ def inject_room_helpers():
     return {'room_display_name': get_room_display_name, 'get_room_info': get_room_info}
 
 
+def _sign_anon(fp: str) -> str:
+    """HMAC-подпись fingerprint от server secret. Cookie = fp.sig."""
+    sig = hmac.new(app.secret_key.encode(), fp.encode(), hashlib.sha256).hexdigest()[:32]
+    return f'{fp}.{sig}'
+
+
+def _verify_anon_cookie(value: str) -> str | None:
+    """Возвращает fingerprint только если подпись валидна."""
+    if not value or '.' not in value:
+        return None
+    fp, sig = value.rsplit('.', 1)
+    expected = hmac.new(app.secret_key.encode(), fp.encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(sig, expected):
+        return None
+    # fingerprint должен быть нашего формата (hex 32 символа), иначе отбрасываем.
+    if len(fp) != 32 or not all(c in '0123456789abcdef' for c in fp):
+        return None
+    return fp
+
+
 def _get_anon_token():
-    """Уникальный токен из отдельного долгоживущего cookie, не зависит от сессии."""
     return request.cookies.get('vsc_anon')
 
 
@@ -162,13 +200,16 @@ def _get_anon_token():
 def assign_anon_id():
     if 'user_type' not in session:
         from models import AnonIdentity
-        token = _get_anon_token()
-        if token:
-            identity = AnonIdentity.query.filter_by(fingerprint=token).first()
-        else:
-            identity = None
+        raw = _get_anon_token()
+        fp = _verify_anon_cookie(raw) if raw else None
+        identity = None
+        if fp:
+            # Лукап только по проверенному fingerprint — никаких чужих захватов.
+            identity = AnonIdentity.query.filter_by(fingerprint=fp).first()
         if not identity:
-            identity = AnonIdentity(fingerprint=token or uuid.uuid4().hex)
+            # Генерируем НОВЫЙ fingerprint ТОЛЬКО серверной стороной.
+            new_fp = secrets.token_hex(16)
+            identity = AnonIdentity(fingerprint=new_fp)
             db.session.add(identity)
             db.session.commit()
         session['user_type'] = 'anon'
@@ -185,16 +226,49 @@ def assign_anon_id():
 
 @app.after_request
 def set_anon_cookie(response):
-    if session.get('user_type') == 'anon' and not request.cookies.get('vsc_anon'):
+    if session.get('user_type') == 'anon':
         fp = session.get('_anon_fp')
-        if fp:
+        existing = _verify_anon_cookie(request.cookies.get('vsc_anon', ''))
+        # Ставим/перевыпускаем cookie, если её ещё нет ИЛИ она с невалидной подписью.
+        if fp and existing != fp:
             response.set_cookie(
-                'vsc_anon', fp,
+                'vsc_anon', _sign_anon(fp),
                 max_age=365 * 24 * 3600,
                 httponly=True,
                 samesite='Lax',
                 secure=app.config.get('SESSION_COOKIE_SECURE', False),
             )
+    return response
+
+
+@app.after_request
+def set_security_headers(response):
+    """Минимальные defense-in-depth заголовки на все ответы."""
+    # Контент рендерится через {{ ... }} (Jinja autoescape), пользовательский
+    # HTML не вставляется — но inline-скрипты в шаблонах используются,
+    # поэтому 'unsafe-inline' для script-src оставляем. style — тоже inline.
+    # Закрываем frame-embedding и MIME-sniffing, ужесточаем Referrer-Policy.
+    response.headers.setdefault(
+        'Content-Security-Policy',
+        "default-src 'self'; "
+        "img-src 'self' data: blob:; "
+        "media-src 'self' blob:; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "script-src 'self' 'unsafe-inline'; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "object-src 'none'"
+    )
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'same-origin')
+    response.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()')
+    # HSTS — только если действительно на HTTPS.
+    if request.is_secure:
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
     return response
 
 

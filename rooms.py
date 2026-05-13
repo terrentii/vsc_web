@@ -18,19 +18,33 @@ rooms_bp = Blueprint('rooms', __name__)
 ROOMS_DIR = os.path.join(os.path.dirname(__file__), 'rooms')
 MAX_MEDIA_BYTES = 20 * 1024 ** 3  # 20 GB
 
-ALLOWED_MIMES = {
-    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-    'image/bmp', 'image/tiff',
+# SVG исключён намеренно: содержит исполняемый JS, отдача inline = stored XSS.
+# Расширение → ожидаемый MIME. При загрузке проверяем оба, при отдаче выставляем
+# Content-Type строго из этой карты, чтобы исключить sniffing.
+EXT_TO_MIME = {
+    'jpg':  'image/jpeg', 'jpeg': 'image/jpeg',
+    'png':  'image/png',  'gif':  'image/gif',
+    'webp': 'image/webp', 'bmp':  'image/bmp', 'tiff': 'image/tiff', 'tif': 'image/tiff',
+    'mp4':  'video/mp4',  'webm': 'video/webm',
+    'mov':  'video/quicktime', 'avi': 'video/x-msvideo',
+    'mp3':  'audio/mpeg', 'ogg':  'audio/ogg',
+    'wav':  'audio/wav',
+    'pdf':  'application/pdf',
+    'txt':  'text/plain', 'csv':  'text/csv',
+    'zip':  'application/zip',
+    'rar':  'application/vnd.rar',
+    'doc':  'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls':  'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
+ALLOWED_MIMES = set(EXT_TO_MIME.values())
+# Типы, которые можно отдавать inline без риска исполнения скриптов.
+INLINE_MIMES = {
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff',
     'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
-    'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/webm',
+    'audio/mpeg', 'audio/ogg', 'audio/wav',
     'application/pdf',
-    'text/plain', 'text/csv',
-    'application/zip', 'application/x-zip-compressed',
-    'application/x-rar-compressed', 'application/vnd.rar',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 }
 
 
@@ -344,6 +358,10 @@ def post_message(room_id):
     return redirect(url_for('rooms.room', room_id=room_id))
 
 
+def _ext_of(filename: str) -> str:
+    return filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+
+
 @rooms_bp.route('/room/<room_id>/upload', methods=['POST'])
 def upload_media(room_id):
     room = Room.query.filter_by(room_id=room_id).first()
@@ -357,15 +375,23 @@ def upload_media(room_id):
     if not file or not file.filename:
         return jsonify({'ok': False, 'error': 'No file'}), 400
 
-    content_type = (file.content_type or '').split(';')[0].strip()
-    if content_type and content_type not in ALLOWED_MIMES:
-        return jsonify({'ok': False, 'error': f'Тип файла не разрешён: {content_type}'}), 415
+    ext = _ext_of(file.filename)
+    expected_mime = EXT_TO_MIME.get(ext)
+    if not expected_mime:
+        return jsonify({'ok': False, 'error': f'Расширение не разрешено: .{ext}'}), 415
 
+    # client_type — это user-controlled значение из multipart-заголовка.
+    # Принимаем расхождение (некоторые браузеры/ОС шлют пустой/octet-stream),
+    # но при отдаче используем СТРОГО expected_mime — без sniffing.
     media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
     os.makedirs(media_dir, exist_ok=True)
 
     original_name = secure_filename(file.filename) or 'file'
+    # Принудительно нормализуем расширение к нижнему регистру.
     safe_name = uuid.uuid4().hex + '_' + original_name
+    if not safe_name.lower().endswith('.' + ext):
+        safe_name += '.' + ext
+
     file.save(os.path.join(media_dir, safe_name))
 
     threading.Thread(target=_cleanup_media, daemon=True).start()
@@ -373,7 +399,7 @@ def upload_media(room_id):
     return jsonify({'ok': True, 'filename': safe_name})
 
 
-@rooms_bp.route('/room/<room_id>/media/<filename>')
+@rooms_bp.route('/room/<room_id>/media/<path:filename>')
 def serve_media(room_id, filename):
     room = Room.query.filter_by(room_id=room_id).first()
     if not room:
@@ -382,8 +408,29 @@ def serve_media(room_id, filename):
     if not _can_access_room(room_id):
         return '', 403
 
+    # Дополнительная защита: явный basename, никаких "../" из URL.
+    safe_filename = os.path.basename(filename)
+    if not safe_filename or safe_filename != filename:
+        return '', 404
+
+    ext = _ext_of(safe_filename)
+    mime = EXT_TO_MIME.get(ext)
+    if not mime:
+        # Файл с неизвестным расширением — отдаём как download octet-stream
+        # без возможности sniffing на стороне клиента.
+        mime = 'application/octet-stream'
+
     media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
-    return send_from_directory(media_dir, filename)
+    as_attachment = mime not in INLINE_MIMES
+    resp = send_from_directory(
+        media_dir, safe_filename,
+        mimetype=mime,
+        as_attachment=as_attachment,
+    )
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    # CSP-кейс для отдельного ресурса: запрещаем исполнение чего-либо внутри.
+    resp.headers['Content-Security-Policy'] = "default-src 'none'; sandbox"
+    return resp
 
 
 @rooms_bp.route('/room/<room_id>/leave', methods=['POST'])

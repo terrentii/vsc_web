@@ -9,6 +9,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
 from models import User, RoomMember, Room
 
+
+def _regenerate_session():
+    """Полностью обновляет session id и flask-login remember-token, чтобы избежать fixation.
+
+    Flask-Session filesystem не имеет встроенного regenerate — заставляем
+    интерфейс выдать новый sid через явную очистку.
+    """
+    session.clear()
+    # session.modified flag заставит подложку сохранить новый sid.
+    session.modified = True
+
 LOGIN_RE = re.compile(r'^[a-zA-Zа-яА-ЯёЁ0-9_]{3,32}$')
 ANON_RE  = re.compile(r'^[Aa]non\d+$')
 
@@ -100,6 +111,7 @@ def register():
     db.session.add(user)
     db.session.commit()
 
+    _regenerate_session()
     login_user(user)
     session['user_type'] = 'registered'
     session['login'] = login
@@ -133,6 +145,7 @@ def login():
                                error=f'Неверный логин или пароль. Осталось попыток: {remaining}.')
 
     _clear_attempts(ip)
+    _regenerate_session()
     login_user(user)
     session['user_type'] = 'registered'
     session['login'] = login_val

@@ -64,7 +64,7 @@
                     {% if media_file %}
                     <div class="msg-media">
                         {% set ml = media_file.lower() %}
-                        {% if ml.endswith('.png') or ml.endswith('.jpg') or ml.endswith('.jpeg') or ml.endswith('.gif') or ml.endswith('.webp') or ml.endswith('.svg') %}
+                        {% if ml.endswith('.png') or ml.endswith('.jpg') or ml.endswith('.jpeg') or ml.endswith('.gif') or ml.endswith('.webp') or ml.endswith('.bmp') or ml.endswith('.tiff') or ml.endswith('.tif') %}
                             <a href="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}" target="_blank">
                                 <img class="msg-media-img" src="{{ url_for('rooms.serve_media', room_id=room_id, filename=media_file) }}" alt="media" loading="lazy">
                             </a>
@@ -258,8 +258,8 @@
         return html;
     }
 
-    const IMAGE_EXTS = ['png','jpg','jpeg','gif','webp','svg'];
-    const VIDEO_EXTS = ['mp4','webm','mov'];
+    const IMAGE_EXTS = ['png','jpg','jpeg','gif','webp','bmp','tiff','tif'];
+    const VIDEO_EXTS = ['mp4','webm','mov','avi'];
 
     function mediaHtml(media) {
         if (!media) return '';

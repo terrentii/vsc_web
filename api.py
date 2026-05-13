@@ -16,6 +16,8 @@ import secrets
 from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request, session
+from flask_wtf.csrf import validate_csrf, CSRFError
+from wtforms.validators import ValidationError
 
 from extensions import db
 from models import ApiKey, Room, Message, RoomMember
@@ -36,6 +38,24 @@ def _resolve_api_key() -> str | None:
     h = _hash_key(raw)
     key = ApiKey.query.filter_by(key_hash=h).first()
     return key.login if key else None
+
+
+def _require_csrf_unless_apikey() -> bool:
+    """CSRF-проверка для запросов с session-cookie. Возвращает True если ок."""
+    # Machine-to-machine — API-ключ. Браузер с cookie — нужен CSRF-токен.
+    if _resolve_api_key():
+        return True
+    token = (
+        request.headers.get('X-CSRFToken')
+        or request.headers.get('X-CSRF-Token')
+        or (request.get_json(silent=True) or {}).get('csrf_token')
+        or request.form.get('csrf_token')
+    )
+    try:
+        validate_csrf(token)
+        return True
+    except (CSRFError, ValidationError):
+        return False
 
 
 def _get_caller() -> str | None:
@@ -118,6 +138,9 @@ def get_messages(room_id):
 
 @api_bp.route('/room/<room_id>/message', methods=['POST'])
 def post_message(room_id):
+    if not _require_csrf_unless_apikey():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 400
+
     room = Room.query.filter_by(room_id=room_id).first()
     if not room:
         return jsonify({'error': 'Room not found'}), 404
@@ -133,10 +156,16 @@ def post_message(room_id):
     if not text and not media:
         return jsonify({'error': 'text or media is required'}), 400
 
-    # X-Bot-Author позволяет боту указать имя отправителя
-    # Доступно только при авторизации через API-ключ
+    # X-Bot-Author: бот указывает alias-имя отправителя.
+    # Запрещаем выдавать себя за существующий логин или за Anon<N> —
+    # это закрыло бы impersonation любого пользователя через API-ключ.
     bot_author = request.headers.get('X-Bot-Author', '').strip()[:64]
     if bot_author and _resolve_api_key():
+        from models import User as UserModel
+        looks_like_anon = bot_author.lower().startswith('anon') and bot_author[4:].isdigit()
+        is_real_user = UserModel.query.filter_by(login=bot_author).first() is not None
+        if looks_like_anon or is_real_user:
+            return jsonify({'error': 'X-Bot-Author не должен совпадать с существующим логином или Anon<N>'}), 400
         author = bot_author
     else:
         author = caller
@@ -188,6 +217,8 @@ def list_keys():
 @api_bp.route('/keys', methods=['POST'])
 def create_key():
     """Создать новый API-ключ. Возвращает ключ ОДИН РАЗ — сохрани его."""
+    if not _require_csrf_unless_apikey():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 400
     if session.get('user_type') != 'registered':
         return jsonify({'error': 'Login required'}), 401
     login = session['login']
@@ -214,6 +245,8 @@ def create_key():
 @api_bp.route('/keys/<int:key_id>', methods=['DELETE'])
 def delete_key(key_id):
     """Удалить ключ по ID."""
+    if not _require_csrf_unless_apikey():
+        return jsonify({'error': 'CSRF token missing or invalid'}), 400
     if session.get('user_type') != 'registered':
         return jsonify({'error': 'Login required'}), 401
     login = session['login']
