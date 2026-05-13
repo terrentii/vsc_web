@@ -84,6 +84,33 @@ def _can_access(room: Room, login: str | None) -> bool:
 
 # ── Rooms ─────────────────────────────────────────────────────────────────────
 
+@api_bp.route('/rooms/tg')
+def list_rooms_tg():
+    """Список комнат, разрешённых к показу в Telegram-боте.
+
+    Требует X-Api-Key. Возвращает только открытые комнаты с tg_visible=True.
+    Поле last_message_at отсутствует в модели — отдаём created_at для сортировки.
+    """
+    if not _resolve_api_key():
+        return jsonify({'error': 'API key required'}), 401
+
+    rooms = (
+        Room.query
+        .filter_by(is_open=True, tg_visible=True)
+        .filter(Room.personal_login.is_(None))
+        .order_by(Room.created_at.desc())
+        .all()
+    )
+    return jsonify([
+        {
+            'room_id': r.room_id,
+            'name': r.name or r.room_id,
+            'created_at': r.created_at.isoformat(),
+        }
+        for r in rooms
+    ])
+
+
 @api_bp.route('/rooms')
 def list_rooms():
     rooms = (
