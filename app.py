@@ -107,6 +107,26 @@ with app.app_context():
     except Exception:
         pass  # таблица ещё не создана — create_all создаст с нужной колонкой
 
+    # Миграция messages.client_msg_id (для уже существующих БД без этой колонки).
+    # Для новых БД db.create_all() создаёт колонку автоматически через модель.
+    try:
+        from sqlalchemy import text, inspect as sa_inspect
+        insp = sa_inspect(db.engine)
+        if 'messages' in insp.get_table_names():
+            msg_cols = {c['name'] for c in insp.get_columns('messages')}
+            if 'client_msg_id' not in msg_cols:
+                with db.engine.connect() as _conn:
+                    _conn.execute(text('ALTER TABLE messages ADD COLUMN client_msg_id VARCHAR(64)'))
+                    _conn.commit()
+            with db.engine.connect() as _conn:
+                _conn.execute(text(
+                    'CREATE UNIQUE INDEX IF NOT EXISTS uq_msg_client_id '
+                    'ON messages(room_id, client_msg_id)'
+                ))
+                _conn.commit()
+    except Exception:
+        pass  # таблица ещё не создана — create_all создаст с нужной колонкой
+
 # Освобождаем blueprint от автоматической CSRF-проверки.
 # Внутри api.py сами вызываем csrf.protect() для эндпоинтов, использующих
 # session-cookie, и пропускаем проверку только когда есть валидный X-Api-Key.

@@ -51,6 +51,11 @@ class Message(db.Model):
     timestamp = db.Column(db.DateTime, default=_utcnow, nullable=False)
     reply_to = db.Column(db.Integer, nullable=True)
     media = db.Column(db.String(256), nullable=True)
+    # NULL разрешён — старые/веб-сообщения без client_msg_id не коллидируют
+    client_msg_id = db.Column(db.String(64), nullable=True)
+
+    __table_args__ = (db.UniqueConstraint('room_id', 'client_msg_id',
+                                          name='uq_msg_client_id'),)
 
 
 class RoomMember(db.Model):
@@ -81,3 +86,14 @@ class ApiKey(db.Model):
     key_hash   = db.Column(db.String(64), unique=True, nullable=False, index=True)
     label      = db.Column(db.String(64), default='', nullable=False)
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+
+
+class AuthToken(db.Model):
+    __tablename__ = 'auth_tokens'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    login      = db.Column(db.String(64), db.ForeignKey('users.login'),
+                           nullable=False, index=True)
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    last_used  = db.Column(db.DateTime, default=_utcnow, nullable=False)
