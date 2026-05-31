@@ -133,7 +133,36 @@ def auth_logout():
 # ── Комнаты (§6.2) ──────────────────────────────────────────────────────────────
 # GET /api/rooms обслуживается в api.list_rooms (один URL): при наличии валидного
 # Bearer-токена там вызывается member_rooms_payload() и возвращается {"rooms":[...]}.
-# Дублировать правило здесь нельзя — api_bp регистрируется первым и перехватил бы.
+# Дублировать GET-правило здесь нельзя — api_bp регистрируется первым и перехватил бы.
+# POST /api/rooms — другой метод, коллизии с GET в api_bp нет, держим тут.
+
+
+@central_bp.route('/rooms', methods=['POST'])
+@require_bearer
+def create_room():
+    """Создать комнату из десктоп-клиента. Caller — godfather-участник.
+
+    Семантика как у веб-`rooms.create_room`: 10-значный room_id, is_open=True
+    (короткий room_id — код для присоединения). Возвращает комнату в форме
+    контракта (§4) с целочисленным Room.id для маршрутизации сообщений."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()[:64]
+    login = g.caller_login
+
+    from rooms import _generate_room_id, ROOMS_DIR
+    room_id = _generate_room_id()
+    now = _utcnow()
+    room = Room(room_id=room_id, name=name, is_open=True,
+                created_at=now, creator_login=login)
+    db.session.add(room)
+    db.session.add(RoomMember(room_id=room_id, login=login,
+                              joined_at=now, role='godfather'))
+    db.session.commit()
+
+    import os
+    os.makedirs(os.path.join(ROOMS_DIR, room_id, 'media'), exist_ok=True)
+
+    return jsonify(_room_dict(room)), 201
 
 
 # ── История (§6.3) ──────────────────────────────────────────────────────────────
