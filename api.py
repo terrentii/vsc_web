@@ -231,6 +231,14 @@ def post_message(room_id):
         'room_id': room_id,
     }, room=room_id)
 
+    from ws_centralized import fanout_message
+    fanout_message(room.id, {
+        "id": msg.id,
+        "sender": author,
+        "body": msg.text,
+        "created_at": msg.timestamp.isoformat(),
+    })
+
     return jsonify({'ok': True, 'id': msg.id, 'author': author, 'text': text, 'media': media}), 201
 
 

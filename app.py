@@ -90,12 +90,16 @@ from auth import auth_bp
 from rooms import rooms_bp, get_room_display_name
 from api import api_bp
 from centralized import central_bp
+from ws_centralized import sock, ws_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
 app.register_blueprint(central_bp, url_prefix='/api')
 csrf.exempt(central_bp)   # Bearer-эндпоинты без CSRF
+app.register_blueprint(ws_bp)
+sock.init_app(app)
+csrf.exempt(ws_bp)        # WS-эндпоинт не использует CSRF
 
 # Автоматическая миграция при старте (idempotent, работает и под gunicorn).
 with app.app_context():
@@ -357,4 +361,4 @@ if __name__ == '__main__':
     os.makedirs('rooms', exist_ok=True)
     with app.app_context():
         db.create_all()
-    socketio.run(app, debug=False)
+    socketio.run(app, host='127.0.0.1', port=int(os.environ.get('PORT', 5000)), debug=False)

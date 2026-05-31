@@ -18,6 +18,7 @@ from flask import Blueprint, request, jsonify, g
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from extensions import db
+from ws_centralized import fanout_message
 from models import User, AuthToken, Room, RoomMember, Message
 from bearer import issue_token, _hash_token, require_bearer
 from auth import (
@@ -220,7 +221,12 @@ def api_post_message():
     db.session.add(m)
     db.session.commit()
 
-    # TODO(1.7): fanout_message(room.room_id, m)
+    fanout_message(room.id, {
+        "id": m.id,
+        "sender": m.author,
+        "body": m.text,
+        "created_at": m.timestamp.isoformat(),
+    })
 
     return jsonify({
         'id': m.id,
