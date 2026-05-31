@@ -171,6 +171,67 @@ def api_create_room():
 
 # ── Messages (Bearer) ──────────────────────────────────────────────────────────
 
+@central_bp.post('/messages')
+@require_bearer
+def api_post_message():
+    """Отправить сообщение в комнату. Идемпотентно по client_msg_id.
+
+    Тело: {"room_id": <int>, "body": "...", "client_msg_id": "<uuid hex>"}
+    """
+    caller = g.caller_login
+    data = request.get_json(silent=True) or {}
+
+    room_id = data.get('room_id')
+    body = data.get('body', '')
+    client_msg_id = data.get('client_msg_id')
+
+    room = db.session.get(Room, room_id)
+    if room is None:
+        return jsonify({'error': 'not_found'}), 404
+
+    member = RoomMember.query.filter_by(room_id=room.room_id, login=caller).first()
+    if not member:
+        return jsonify({'error': 'forbidden'}), 403
+
+    # Идемпотентность: вернуть существующее сообщение, если client_msg_id уже есть
+    if client_msg_id:
+        existing = Message.query.filter_by(
+            room_id=room.room_id, client_msg_id=client_msg_id
+        ).first()
+        if existing:
+            m = existing
+            return jsonify({
+                'id': m.id,
+                'room_id': room.id,
+                'sender': m.author,
+                'body': m.text,
+                'created_at': m.timestamp.isoformat(),
+                'client_msg_id': m.client_msg_id,
+            }), 200
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    m = Message(
+        room_id=room.room_id,
+        author=caller,
+        text=body,
+        timestamp=now,
+        client_msg_id=client_msg_id,
+    )
+    db.session.add(m)
+    db.session.commit()
+
+    # TODO(1.7): fanout_message(room.room_id, m)
+
+    return jsonify({
+        'id': m.id,
+        'room_id': room.id,
+        'sender': m.author,
+        'body': m.text,
+        'created_at': m.timestamp.isoformat(),
+        'client_msg_id': m.client_msg_id,
+    }), 200
+
+
 @central_bp.get('/rooms/<int:room_id>/messages')
 @require_bearer
 def api_room_messages(room_id: int):

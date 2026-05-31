@@ -159,6 +159,28 @@ def test_messages_forbidden_for_non_member(client):
     assert client.get(f'/api/rooms/{rid}/messages', headers=h_other).status_code == 403
 
 
+def test_post_message_idempotent(client):
+    h = _auth(client, 'idem')
+    rid = client.post('/api/rooms', json={'name': 'r'}, headers=h).get_json()['id']
+    body = {'room_id': rid, 'body': 'hi', 'client_msg_id': 'dup-1'}
+    first = client.post('/api/messages', json=body, headers=h)
+    assert first.status_code == 200
+    first_j = first.get_json()
+    second_j = client.post('/api/messages', json=body, headers=h).get_json()
+    assert first_j['id'] == second_j['id']
+    assert set(first_j) >= {'id', 'room_id', 'sender', 'body', 'created_at', 'client_msg_id'}
+    assert first_j['room_id'] == rid and first_j['sender'] == 'idem' and first_j['body'] == 'hi'
+    page = client.get(f'/api/rooms/{rid}/messages', headers=h).get_json()
+    assert len(page['messages']) == 1  # дубля нет
+
+def test_post_message_requires_bearer(client):
+    assert client.post('/api/messages', json={'room_id': 1, 'body': 'x', 'client_msg_id': 'c'}).status_code == 401
+
+def test_post_message_unknown_room_404(client):
+    h = _auth(client, 'noroom')
+    assert client.post('/api/messages', json={'room_id': 999999, 'body': 'x', 'client_msg_id': 'c'}, headers=h).status_code == 404
+
+
 def test_updated_at_reflects_last_message(client):
     """updated_at комнаты меняется после добавления сообщения."""
     h = _auth(client, 'timey')
