@@ -117,6 +117,14 @@ def list_rooms_tg():
 
 @api_bp.route('/rooms')
 def list_rooms():
+    # Bearer-hook: десктоп-клиент отправляет Authorization: Bearer <token>.
+    # Ленивый импорт исключает циклическую зависимость (api ↔ centralized).
+    from bearer import resolve_bearer
+    _login = resolve_bearer()
+    if _login:
+        from centralized import bearer_list_rooms
+        return bearer_list_rooms(_login)
+
     rooms = (
         Room.query
         .filter_by(is_open=True)
