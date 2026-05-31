@@ -89,10 +89,15 @@ socketio.init_app(app, cors_allowed_origins=_socket_origins, async_mode=_async_m
 from auth import auth_bp
 from rooms import rooms_bp, get_room_display_name
 from api import api_bp
+from centralized import central_bp            # токен+REST для десктопа (под-проект №6)
+from ws_centralized import sock, ws_bp        # сырой WebSocket /ws
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
+app.register_blueprint(central_bp, url_prefix='/api')
+app.register_blueprint(ws_bp)
+sock.init_app(app)                            # flask-sock (raw WS /ws)
 
 # Автоматическая миграция при старте (idempotent, работает и под gunicorn).
 with app.app_context():
@@ -104,13 +109,25 @@ with app.app_context():
             with db.engine.connect() as _conn:
                 _conn.execute(text('ALTER TABLE rooms ADD COLUMN tg_visible BOOLEAN NOT NULL DEFAULT 0'))
                 _conn.commit()
+        # под-проект №6: колонка идемпотентности + UNIQUE(room_id, client_msg_id).
+        msg_cols = {c['name'] for c in insp.get_columns('messages')}
+        if 'client_msg_id' not in msg_cols:
+            with db.engine.connect() as _conn:
+                _conn.execute(text('ALTER TABLE messages ADD COLUMN client_msg_id VARCHAR(64)'))
+                _conn.commit()
+        with db.engine.connect() as _conn:
+            # SQLite не добавляет constraint через ALTER — отдельным индексом.
+            _conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS uq_msg_client_id '
+                               'ON messages(room_id, client_msg_id)'))
+            _conn.commit()
     except Exception:
-        pass  # таблица ещё не создана — create_all создаст с нужной колонкой
+        pass  # таблица ещё не создана — create_all создаст с нужной схемой
 
 # Освобождаем blueprint от автоматической CSRF-проверки.
 # Внутри api.py сами вызываем csrf.protect() для эндпоинтов, использующих
 # session-cookie, и пропускаем проверку только когда есть валидный X-Api-Key.
 csrf.exempt(api_bp)
+csrf.exempt(central_bp)  # Bearer-маршруты под-проекта №6 — без cookie/CSRF
 
 MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
           'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']

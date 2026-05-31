@@ -9,6 +9,7 @@ Flask-SocketIO==5.5.1
 Flask-SQLAlchemy==3.1.1
 eventlet
 simple-websocket==1.1.0
+flask-sock==0.7.0
 Flask-WTF==1.2.2
 gunicorn==23.0.0
 itsdangerous==2.2.0

@@ -117,6 +117,16 @@ def list_rooms_tg():
 
 @api_bp.route('/rooms')
 def list_rooms():
+    # Bearer (десктоп mys_centralized, под-проект №6): комнаты участника в форме
+    # {"rooms":[{id,name,is_direct,updated_at}]}. Без Bearer — legacy-список ниже.
+    from bearer import resolve_bearer
+    if request.headers.get('Authorization', '').startswith('Bearer '):
+        login = resolve_bearer()
+        if not login:
+            return jsonify({'error': 'unauthorized'}), 401
+        from centralized import member_rooms_payload
+        return jsonify(member_rooms_payload(login))
+
     rooms = (
         Room.query
         .filter_by(is_open=True)
@@ -222,6 +232,16 @@ def post_message(room_id):
         'media': media,
         'room_id': room_id,
     }, room=room_id)
+
+    # Фан-аут в сырой /ws, чтобы десктоп (под-проект №6) видел и веб-сообщения.
+    from ws_centralized import fanout_message
+    fanout_message(room.id, {
+        'id': msg.id,
+        'room_id': room.id,
+        'sender': author,
+        'body': text,
+        'created_at': msg.timestamp.isoformat(),
+    })
 
     return jsonify({'ok': True, 'id': msg.id, 'author': author, 'text': text, 'media': media}), 201
 
