@@ -91,6 +91,7 @@ from rooms import rooms_bp, get_room_display_name
 from api import api_bp
 from centralized import central_bp
 from ws_centralized import sock, ws_bp
+from rendezvous_ws import p2p_sock, p2p_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
@@ -100,6 +101,9 @@ csrf.exempt(central_bp)   # Bearer-эндпоинты без CSRF
 app.register_blueprint(ws_bp)
 sock.init_app(app)
 csrf.exempt(ws_bp)        # WS-эндпоинт не использует CSRF
+app.register_blueprint(p2p_bp)
+p2p_sock.init_app(app)
+csrf.exempt(p2p_bp)       # P2P WS-эндпоинт без CSRF (raw binary, no auth)
 
 # Автоматическая миграция при старте (idempotent, работает и под gunicorn).
 with app.app_context():
