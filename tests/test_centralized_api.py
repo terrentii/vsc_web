@@ -207,3 +207,10 @@ def test_updated_at_reflects_last_message(client):
     rooms = client.get('/api/rooms', headers=h).get_json()['rooms']
     room_entry = next(r for r in rooms if r['id'] == rid)
     assert room_entry['updated_at'] > updated_at_before
+
+
+def test_web_routes_still_work(client):
+    """Регрессия: существующие веб-маршруты не сломаны новыми Bearer-эндпоинтами."""
+    assert client.get('/').status_code == 200
+    # существующий анонимный /api/* отвечает как прежде (не 404/500)
+    assert client.get('/api/rooms/tg').status_code in (200, 401, 403)
