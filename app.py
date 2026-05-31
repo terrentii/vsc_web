@@ -89,10 +89,13 @@ socketio.init_app(app, cors_allowed_origins=_socket_origins, async_mode=_async_m
 from auth import auth_bp
 from rooms import rooms_bp, get_room_display_name
 from api import api_bp
+from centralized import central_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
+app.register_blueprint(central_bp, url_prefix='/api')
+csrf.exempt(central_bp)   # Bearer-эндпоинты без CSRF
 
 # Автоматическая миграция при старте (idempotent, работает и под gunicorn).
 with app.app_context():
