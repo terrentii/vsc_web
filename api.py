@@ -237,6 +237,7 @@ def post_message(room_id):
         "sender": author,
         "body": msg.text,
         "created_at": msg.timestamp.isoformat(),
+        "client_msg_id": None,  # web-путь без client_msg_id → дедуп по серверному id
     })
 
     return jsonify({'ok': True, 'id': msg.id, 'author': author, 'text': text, 'media': media}), 201

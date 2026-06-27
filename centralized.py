@@ -226,6 +226,7 @@ def api_post_message():
         "sender": m.author,
         "body": m.text,
         "created_at": m.timestamp.isoformat(),
+        "client_msg_id": m.client_msg_id,
     })
 
     return jsonify({
