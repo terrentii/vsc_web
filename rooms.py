@@ -37,6 +37,7 @@ EXT_TO_MIME = {
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'xls':  'application/vnd.ms-excel',
     'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'appimage': 'application/x-executable',
 }
 ALLOWED_MIMES = set(EXT_TO_MIME.values())
 # Типы, которые можно отдавать inline без риска исполнения скриптов.
