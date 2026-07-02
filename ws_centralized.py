@@ -37,13 +37,12 @@ def _rooms_for(login: str) -> list[int]:
     return [r.id for r in rooms]
 
 
-def fanout_message(room_db_id: int, payload: dict) -> None:
-    """Отправить payload всем подписанным WebSocket-соединениям комнаты.
+def fanout_event(room_db_id: int, payload: dict) -> None:
+    """Отправить произвольный кадр (с ключом type) всем WS-подписчикам комнаты.
 
-    Вызывать ПОСЛЕ commit из обоих путей записи.
-    payload должен содержать ключи: id, sender, body, created_at.
+    Вызывать ПОСЛЕ commit. Типы кадров: message / message_edited / message_deleted.
     """
-    frame = json.dumps({"type": "message", "room_id": room_db_id, **payload})
+    frame = json.dumps({"room_id": room_db_id, **payload})
     with _lock:
         targets = list(_subs.get(room_db_id, ()))
     for ws in targets:
@@ -51,6 +50,15 @@ def fanout_message(room_db_id: int, payload: dict) -> None:
             ws.send(frame)
         except Exception:
             pass
+
+
+def fanout_message(room_db_id: int, payload: dict) -> None:
+    """Отправить payload всем подписанным WebSocket-соединениям комнаты.
+
+    Вызывать ПОСЛЕ commit из обоих путей записи.
+    payload должен содержать ключи: id, sender, body, created_at.
+    """
+    fanout_event(room_db_id, {"type": "message", **payload})
 
 
 @sock.route('/ws', bp=ws_bp)

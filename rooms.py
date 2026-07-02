@@ -12,6 +12,7 @@ from werkzeug.utils import secure_filename
 
 from extensions import db, socketio
 from models import Room, Message, RoomMember
+from ws_centralized import fanout_message, fanout_event
 
 rooms_bp = Blueprint('rooms', __name__)
 
@@ -221,6 +222,7 @@ def edit_message(room_id, msg_index):
     db.session.commit()
 
     socketio.emit('edit_message', {'index': msg_index, 'text': new_text}, room=room_id)
+    fanout_event(room.id, {'type': 'message_edited', 'id': msg.id, 'body': new_text})
     return jsonify({'ok': True, 'text': new_text})
 
 
@@ -247,10 +249,12 @@ def delete_message(room_id, msg_index):
     if msg.author != current_user:
         return jsonify({'ok': False}), 403
 
+    deleted_id = msg.id
     db.session.delete(msg)
     db.session.commit()
 
     socketio.emit('delete_message', {'index': msg_index}, room=room_id)
+    fanout_event(room.id, {'type': 'message_deleted', 'id': deleted_id})
     return jsonify({'ok': True})
 
 
@@ -353,6 +357,22 @@ def post_message(room_id):
             entry['reply_author'] = ref.author
             entry['reply_text'] = ref.text[:60]
     socketio.emit('new_message', entry, room=room_id)
+    # Десктопные Bearer-клиенты слушают raw-WS /ws — уведомляем и их
+    reply_payload = None
+    if 'reply_author' in entry:
+        ref = Message.query.filter_by(room_id=room_id).order_by(Message.id) \
+            .offset(int(entry['reply_to']) - 1).first()
+        if ref:
+            reply_payload = {'id': ref.id, 'sender': ref.author, 'body': (ref.text or '')[:60]}
+    fanout_message(room.id, {
+        'id': msg.id,
+        'sender': msg.author,
+        'body': msg.text,
+        'created_at': msg.timestamp.isoformat(),
+        'client_msg_id': None,
+        'media': msg.media,
+        'reply_to': reply_payload,
+    })
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'ok': True})
