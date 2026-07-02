@@ -48,13 +48,13 @@
                     <span>Телеграм-бот</span>
                 </div>
                 <div id="tg-row" style="{{ 'display:none' if not config.is_open else '' }}; margin-bottom:18px;">
-                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-family:var(--font-mono);font-size:15px;">
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-family:var(--font-mono);font-size:16px;">
                         <input type="checkbox" name="tg_visible" id="tg_visible"
                                {{ 'checked' if config.tg_visible else '' }}
                                style="width:16px;height:16px;cursor:pointer;">
                         Показывать комнату в Telegram-боте
                     </label>
-                    <p style="margin-top:6px;font-family:var(--font-mono);font-size:13px;color:var(--muted);letter-spacing:.04em;">
+                    <p style="margin-top:6px;font-family:var(--font-mono);font-size:14px;color:var(--muted);letter-spacing:.04em;">
                         Только открытые комнаты могут быть видны боту. При переключении в закрытую галочка сбрасывается.
                     </p>
                 </div>
