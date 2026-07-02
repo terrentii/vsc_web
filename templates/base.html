@@ -12,6 +12,19 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
+    /* Шрифт ГОСТ — тот же, что в десктоп-приложении (packaging: static/fonts) */
+    @font-face {
+      font-family: 'GOST type B';
+      src: url("{{ url_for('static', filename='fonts/gost-type-b.ttf') }}") format('truetype');
+      font-weight: 100 900;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'GOST 2.304 type A';
+      src: url("{{ url_for('static', filename='fonts/gost-type-a.ttf') }}") format('truetype');
+      font-weight: 100 900;
+      font-display: swap;
+    }
     /* ── МЫС Design System ────────────────────────────────── */
     :root {
       --mys-blue:      #0040ff;
@@ -25,10 +38,11 @@
       --hairline-2:    rgba(6,17,42,.06);
       --muted:         rgba(6,17,42,.55);
       --muted-2:       rgba(6,17,42,.4);
-      --font-display:  'Inter','Segoe UI',sans-serif;
-      --font-ui:       'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;
-      --font-system:   'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;
-      --font-mono:     'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+      /* ГОСТ-шрифт приложения; Inter/JetBrains Mono — фолбэк, пока грузится */
+      --font-display:  'GOST type B','GOST 2.304 type A','Inter','Segoe UI',sans-serif;
+      --font-ui:       'GOST type B','GOST 2.304 type A','Inter','Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;
+      --font-system:   'GOST type B','GOST 2.304 type A','Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;
+      --font-mono:     'GOST type B','GOST 2.304 type A','JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -431,7 +445,7 @@
     /* ── CODE BLOCKS ───────────────────────────────────────────── */
     .code-block {
         border: 1.5px solid var(--mys-ink); margin: 8px 0;
-        font-family: 'Consolas', 'Courier New', monospace;
+        font-family: var(--font-mono);
         font-size: 12px; overflow: hidden;
     }
     .code-block-bar {

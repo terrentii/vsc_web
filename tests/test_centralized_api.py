@@ -429,3 +429,27 @@ def test_delete_foreign_message_403(client):
     _room_id, m = _room_and_msg(client, h1)
     h2 = _auth(client, 'intruder2')
     assert client.post(f"/api/messages/{m['id']}/delete", headers=h2).status_code == 403
+
+
+def test_reply_to_image_message_quotes_placeholder(client):
+    import io
+    h = _auth(client, 'imgreplyer')
+    room_id = client.post('/api/rooms', json={'name': 'r'}, headers=h).get_json()['id']
+    # минимальный валидный PNG (1x1)
+    png = bytes.fromhex(
+        '89504e470d0a1a0a0000000d4948445200000001000000010804000000b51c0c'
+        '020000000b4944415478da6364f80f00010501012718e3660000000049454e44ae426082'
+    )
+    up = client.post(f'/api/rooms/{room_id}/media',
+                     data={'file': (io.BytesIO(png), 'кот.png')},
+                     content_type='multipart/form-data', headers=h)
+    assert up.status_code == 201
+    fname = up.get_json()['filename']
+    m = client.post('/api/messages', json={
+        'room_id': room_id, 'body': '', 'client_msg_id': 'cm1', 'media': fname,
+    }, headers=h).get_json()
+    r = client.post('/api/messages', json={
+        'room_id': room_id, 'body': 'красивый кот', 'client_msg_id': 'cm2',
+        'reply_to': m['id'],
+    }, headers=h).get_json()
+    assert r['reply_to']['body'] == 'Изображение'

@@ -81,11 +81,22 @@ def _ref_by_index(room_str_id: str, index) -> Message | None:
 
 
 def _reply_payload(m: Message) -> dict | None:
-    """Готовая цитата для Bearer-клиента: {id, sender, body(≤60)} либо None."""
+    """Готовая цитата для Bearer-клиента: {id, sender, body(≤60)} либо None.
+
+    У вложений без текста цитата — «Изображение» либо имя файла (байты
+    вложения в цитату не «расшифровываем»)."""
     ref = _ref_by_index(m.room_id, m.reply_to)
     if ref is None:
         return None
-    return {'id': ref.id, 'sender': ref.author, 'body': (ref.text or '')[:60]}
+    body = (ref.text or '')[:60]
+    if not body and ref.media:
+        mime = EXT_TO_MIME.get(_ext_of(ref.media), '')
+        if mime.startswith('image/'):
+            body = 'Изображение'
+        else:
+            _, _, original = ref.media.partition('_')
+            body = original or 'Файл'
+    return {'id': ref.id, 'sender': ref.author, 'body': body}
 
 
 def _message_dict(m: Message, room_int_id: int) -> dict:
