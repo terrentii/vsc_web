@@ -53,6 +53,10 @@
       color: var(--mys-ink);
       display: flex;
       flex-direction: column;
+      /* ГОСТ-шрифт узкий и тонкий — синтезируем полужирный и раздвигаем буквы
+         для читаемости; наследуется всей вёрсткой */
+      font-weight: 600;
+      letter-spacing: .02em;
     }
     #mys-root { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 
