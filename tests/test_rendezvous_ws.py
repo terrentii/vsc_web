@@ -144,7 +144,7 @@ import sys as _sys
 if _VCS_WEB not in _sys.path:
     _sys.path.insert(0, _VCS_WEB)
 
-from rendezvous_ws import encode_frame, frame_type, frame_payload, HELLO, PAIR, RELAY
+from rendezvous_ws import encode_frame, frame_type, frame_payload, HELLO, PAIR, RELAY, PEER_LEFT
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +282,41 @@ def test_third_client_rejected(live_server):
             await c.close()
         except Exception:
             pass
+
+    asyncio.run(run())
+
+
+def test_peer_left_notifies_remaining_member(live_server):
+    """Онлайн-статус на десктопе: когда один пир закрывает соединение, второй
+    получает явный кадр PEER_LEFT (а не молчание — его собственный WS с
+    сервером остаётся открытым, relay просто перестал бы получать кадры)."""
+
+    async def run():
+        import websockets
+
+        rid = b'\x55' * 32
+        a_cands = [('10.10.10.1', 6000)]
+        b_cands = [('10.10.10.2', 6001)]
+
+        a = await websockets.connect(live_server.ws_url + '/p2p')
+        await a.send(encode_frame(HELLO, _hello_payload(rid, a_cands)))
+
+        b = await websockets.connect(live_server.ws_url + '/p2p')
+        await b.send(encode_frame(HELLO, _hello_payload(rid, b_cands)))
+
+        # Drain PAIR frames
+        await asyncio.wait_for(a.recv(), timeout=5)
+        await asyncio.wait_for(b.recv(), timeout=5)
+
+        await a.close()
+
+        frame = await asyncio.wait_for(b.recv(), timeout=5)
+        assert isinstance(frame, (bytes, bytearray))
+        assert frame_type(frame) == PEER_LEFT, (
+            f"b got type {frame_type(frame)}, expected PEER_LEFT={PEER_LEFT}"
+        )
+
+        await b.close()
 
     asyncio.run(run())
 

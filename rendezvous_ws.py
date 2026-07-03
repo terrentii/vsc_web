@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from flask import Blueprint
 from flask_sock import Sock
 
-HELLO, PAIR, RELAY = 1, 2, 5
+HELLO, PAIR, RELAY, PEER_LEFT = 1, 2, 5, 9
 ROLE_INITIATOR, ROLE_RESPONDER = 0, 1
 _HEADER = 6
 
@@ -125,7 +125,18 @@ def p2p(ws):
         if room_id is not None and member is not None:
             with _rooms_lock:
                 room = _rooms.get(room_id)
+                remaining = []
                 if room is not None and member in room:
                     room.remove(member)
+                    remaining = list(room)
                     if not room:
                         _rooms.pop(room_id, None)
+            # Оставшийся участник узнаёт об уходе пира явно — его собственное
+            # WS-соединение с сервером живо и без этого молчало бы вечно (relay
+            # просто перестаёт получать кадры), а «онлайн»-статус на клиенте
+            # навсегда завис бы в True.
+            for other in remaining:
+                try:
+                    other.send(encode_frame(PEER_LEFT, b""))
+                except Exception:
+                    pass
