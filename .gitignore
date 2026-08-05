@@ -14,6 +14,7 @@ rooms/
 users/
 flask_session/
 .secret_key
+.message_key
 
 rooms.txt
 inspiration.txt

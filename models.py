@@ -4,7 +4,21 @@ from datetime import datetime, timezone
 def _utcnow():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 from flask_login import UserMixin
+from sqlalchemy.types import TypeDecorator, Text as _Text
 from extensions import db
+from crypto import encrypt_text, decrypt_text
+
+
+class EncryptedText(TypeDecorator):
+    """Текст сообщения хранится в БД зашифрованным (см. crypto.py)."""
+    impl = _Text
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        return encrypt_text(value)
+
+    def process_result_value(self, value, dialect):
+        return decrypt_text(value)
 
 
 class User(UserMixin, db.Model):
@@ -47,7 +61,7 @@ class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     room_id = db.Column(db.String(10), db.ForeignKey('rooms.room_id'), nullable=False, index=True)
     author = db.Column(db.String(64), nullable=False)
-    text = db.Column(db.Text, default='', nullable=False)
+    text = db.Column(EncryptedText, default='', nullable=False)
     timestamp = db.Column(db.DateTime, default=_utcnow, nullable=False)
     reply_to = db.Column(db.Integer, nullable=True)
     media = db.Column(db.String(256), nullable=True)
