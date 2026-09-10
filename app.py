@@ -92,6 +92,7 @@ from api import api_bp
 from centralized import central_bp
 from ws_centralized import sock, ws_bp
 from rendezvous_ws import p2p_sock, p2p_bp
+import voice  # noqa: F401 — регистрирует Socket.IO-обработчики голосового канала
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)
