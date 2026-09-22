@@ -127,6 +127,49 @@
     .theme-toggle:hover { background: var(--mys-blue); color: #fff; border-color: var(--mys-blue); }
     .theme-toggle .tt-icon { font-size: 16px; line-height: 1; color: var(--mys-blue); }
     .theme-toggle:hover .tt-icon { color: #fff; }
+    /* ponytail: <details> вместо своего поповера — открытие/закрытие даёт браузер */
+    .info-menu { position: relative; display: inline-flex; margin-right: 4px; }
+    .info-menu > summary {
+      list-style: none; cursor: pointer;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.18);
+      color: var(--paper);
+      padding: 4px 8px;
+      display: inline-flex; align-items: center;
+      transition: background .12s, border-color .12s;
+    }
+    .info-menu > summary::-webkit-details-marker { display: none; }
+    .info-menu > summary::marker { content: ''; }
+    .info-menu > summary:hover,
+    .info-menu[open] > summary { background: var(--mys-blue); border-color: var(--mys-blue); color: #fff; }
+    .info-menu svg { display: block; width: 15px; height: 15px; }
+    .info-panel {
+      position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
+      min-width: 240px;
+      background: var(--paper); color: var(--mys-ink);
+      border: 1.5px solid var(--mys-ink);
+      box-shadow: 4px 4px 0 0 var(--mys-ink);
+      padding: 10px 12px;
+      font-family: var(--font-mono); font-size: 13px;
+      font-weight: 400; letter-spacing: 0; text-transform: none;
+    }
+    .info-panel-title {
+      font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 8px;
+    }
+    /* .menubar a красит ссылки в белый и капсом — в панели это надо сбросить явно */
+    .info-panel a {
+      display: block; padding: 3px 0;
+      color: var(--mys-blue); border: none; background: none;
+      font-size: 13px; font-weight: 700;
+      letter-spacing: 0; text-transform: none;
+    }
+    .info-panel a:hover { background: none; border: none; color: var(--mys-blue-deep); text-decoration: underline; }
+    .info-panel a + a { margin-top: 6px; }
+    .info-panel .info-hint {
+      display: block; color: var(--muted);
+      font-size: 11px; font-weight: 400; text-decoration: none;
+    }
     .user-badge {
       color: var(--paper); padding: 4px 10px;
       background: rgba(255,255,255,.06);
@@ -1127,6 +1170,24 @@
             </span>
         </div>
         <div class="menubar-right">
+            <details class="info-menu" id="info-menu">
+                <summary aria-label="О проекте и ссылки" title="О проекте">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+                        <circle cx="8" cy="8" r="6.6"/>
+                        <path d="M8 7.1v4.1" stroke-linecap="round"/>
+                        <path d="M8 4.7v.9" stroke-linecap="round"/>
+                    </svg>
+                </summary>
+                <div class="info-panel">
+                    <div class="info-panel-title">Исходный код</div>
+                    <a href="https://github.com/terrentii/vsc_web" target="_blank" rel="noopener">
+                        vsc_web <span class="info-hint">версия для браузера</span>
+                    </a>
+                    <a href="https://github.com/terrentii/vsc_desktop" target="_blank" rel="noopener">
+                        vsc_desktop <span class="info-hint">версия для компьютера</span>
+                    </a>
+                </div>
+            </details>
             <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему">
                 <span class="tt-icon" id="theme-icon">☾</span>
                 <span class="tt-label" id="theme-label">Dark</span>
@@ -1189,6 +1250,17 @@
         const isDark = root.classList.contains('theme-dark');
         applyTheme(isDark ? 'light' : 'dark');
     });
+
+    // Панель со ссылками закрывается сама, когда кликнули мимо или нажали Esc
+    const infoMenu = document.getElementById('info-menu');
+    if (infoMenu) {
+        document.addEventListener('click', function(e) {
+            if (infoMenu.open && !infoMenu.contains(e.target)) infoMenu.open = false;
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') infoMenu.open = false;
+        });
+    }
 
     // Sidebar mobile toggle
     const hamburger = document.getElementById('hamburger-btn');
