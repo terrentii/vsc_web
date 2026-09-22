@@ -259,22 +259,20 @@ def api_upload_media(room_id):
     if not _can_access(room, caller):
         return jsonify({'error': 'Access denied'}), 403
 
-    from rooms import EXT_TO_MIME, ROOMS_DIR, _cleanup_media
+    from rooms import ROOMS_DIR, _cleanup_media
 
     file = request.files.get('file')
     if not file or not file.filename:
         return jsonify({'error': 'No file'}), 400
 
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-    if not EXT_TO_MIME.get(ext):
-        return jsonify({'error': f'Extension not allowed: .{ext}'}), 415
 
     media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
     os.makedirs(media_dir, exist_ok=True)
 
     original_name = secure_filename(file.filename) or 'file'
     safe_name = uuid.uuid4().hex + '_' + original_name
-    if not safe_name.lower().endswith('.' + ext):
+    if ext and not safe_name.lower().endswith('.' + ext):
         safe_name += '.' + ext
 
     file.save(os.path.join(media_dir, safe_name))

@@ -247,16 +247,14 @@ def api_upload_media(room_id: int):
         return jsonify({'error': 'no_file'}), 400
 
     ext = _ext_of(file.filename)
-    expected_mime = EXT_TO_MIME.get(ext)
-    if not expected_mime:
-        return jsonify({'error': 'extension_not_allowed', 'ext': ext}), 415
+    expected_mime = EXT_TO_MIME.get(ext) or 'application/octet-stream'
 
     media_dir = os.path.join(ROOMS_DIR, room.room_id, 'media')
     os.makedirs(media_dir, exist_ok=True)
 
     original_name = secure_filename(file.filename) or 'file'
     safe_name = uuid.uuid4().hex + '_' + original_name
-    if not safe_name.lower().endswith('.' + ext):
+    if ext and not safe_name.lower().endswith('.' + ext):
         safe_name += '.' + ext
 
     dest = os.path.join(media_dir, safe_name)

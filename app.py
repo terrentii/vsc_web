@@ -46,7 +46,8 @@ if os.environ.get('BEHIND_PROXY', '').strip() in ('1', 'true', 'yes', 'on'):
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=0)
 
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 ** 3  # 5 GB
+# ponytail: лимита на размер загрузки нет — режет только nginx client_max_body_size
+app.config['MAX_CONTENT_LENGTH'] = None
 
 # Настройки сессии
 app.config['SESSION_TYPE'] = 'filesystem'
@@ -92,7 +93,6 @@ from api import api_bp
 from centralized import central_bp
 from ws_centralized import sock, ws_bp
 from rendezvous_ws import p2p_sock, p2p_bp
-import voice  # noqa: F401 — регистрирует Socket.IO-обработчики голосового канала
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(rooms_bp)

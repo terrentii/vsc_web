@@ -11,13 +11,14 @@ from flask_socketio import join_room as sio_join_room, emit as sio_emit
 from werkzeug.utils import secure_filename
 
 from extensions import db, socketio
+from media_cleanup import cleanup as _cleanup_media
 from models import Room, Message, RoomMember
 from ws_centralized import fanout_message, fanout_event
 
 rooms_bp = Blueprint('rooms', __name__)
 
 ROOMS_DIR = os.path.join(os.path.dirname(__file__), 'rooms')
-MAX_MEDIA_BYTES = 20 * 1024 ** 3  # 20 GB
+MAX_TEXT = 4000  # длиннее — сообщение уходит несколькими частями
 
 # SVG исключён намеренно: содержит исполняемый JS, отдача inline = stored XSS.
 # Расширение → ожидаемый MIME. При загрузке проверяем оба, при отдаче выставляем
@@ -48,37 +49,6 @@ INLINE_MIMES = {
     'audio/mpeg', 'audio/ogg', 'audio/wav',
     'application/pdf',
 }
-
-
-def _cleanup_media(max_bytes=None):
-    if max_bytes is None:
-        max_bytes = MAX_MEDIA_BYTES
-    files = []
-    if not os.path.isdir(ROOMS_DIR):
-        return
-    for room_dir in os.listdir(ROOMS_DIR):
-        media_path = os.path.join(ROOMS_DIR, room_dir, 'media')
-        if not os.path.isdir(media_path):
-            continue
-        for fname in os.listdir(media_path):
-            fp = os.path.join(media_path, fname)
-            try:
-                stat = os.stat(fp)
-                files.append((fp, stat.st_mtime, stat.st_size))
-            except OSError:
-                continue
-    total = sum(f[2] for f in files)
-    if total <= max_bytes:
-        return
-    files.sort(key=lambda f: f[1])
-    for fp, mtime, size in files:
-        if total <= max_bytes:
-            break
-        try:
-            os.remove(fp)
-        except OSError:
-            continue
-        total -= size
 
 
 def _generate_room_id():
@@ -298,6 +268,63 @@ def poll_messages(room_id):
     return jsonify(new_msgs)
 
 
+def _split_text(text: str) -> list[str]:
+    """Режем по границе строки/слова, чтобы длинный текст уходил частями, а не обрезался."""
+    parts = []
+    while len(text) > MAX_TEXT:
+        cut = text.rfind('\n', 0, MAX_TEXT + 1)
+        if cut <= 0:
+            cut = text.rfind(' ', 0, MAX_TEXT + 1)
+        if cut <= 0:
+            cut = MAX_TEXT
+        parts.append(text[:cut].rstrip())
+        text = text[cut:].lstrip()
+    parts.append(text)
+    return parts
+
+
+def _create_message(room, author, text, media, reply_to):
+    msg = Message(
+        room_id=room.room_id,
+        author=author,
+        text=text,
+        timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
+        reply_to=reply_to,
+        media=media or None,
+    )
+    db.session.add(msg)
+    db.session.commit()
+
+    entry = {
+        'index': Message.query.filter_by(room_id=room.room_id).order_by(Message.id).count(),
+        'author': msg.author,
+        'timestamp': msg.timestamp.isoformat(),
+        'text': msg.text,
+        'reply_to': str(msg.reply_to) if msg.reply_to else '',
+        'media': msg.media or '',
+        'room_id': room.room_id,
+    }
+    ref = None
+    if msg.reply_to:
+        ref = Message.query.filter_by(room_id=room.room_id).order_by(Message.id) \
+            .offset(msg.reply_to - 1).first()
+        if ref:
+            entry['reply_author'] = ref.author
+            entry['reply_text'] = (ref.text or '')[:60]
+    socketio.emit('new_message', entry, room=room.room_id)
+
+    # Десктопные Bearer-клиенты слушают raw-WS /ws — уведомляем и их
+    fanout_message(room.id, {
+        'id': msg.id,
+        'sender': msg.author,
+        'body': msg.text,
+        'created_at': msg.timestamp.isoformat(),
+        'client_msg_id': None,
+        'media': msg.media,
+        'reply_to': {'id': ref.id, 'sender': ref.author, 'body': (ref.text or '')[:60]} if ref else None,
+    })
+
+
 @rooms_bp.route('/room/<room_id>/message', methods=['POST'])
 def post_message(room_id):
     room = Room.query.filter_by(room_id=room_id).first()
@@ -307,7 +334,7 @@ def post_message(room_id):
     if not _can_access_room(room_id):
         return redirect(url_for('index'))
 
-    text = re.sub(r'\n{6,}', '\n\n\n\n\n', request.form.get('text', '').strip())[:4000]
+    text = re.sub(r'\n{6,}', '\n\n\n\n\n', request.form.get('text', '').strip())
     media = request.form.get('media', '').strip()
     # Разрешаем только имя файла без пути — только файлы этой комнаты
     if media:
@@ -328,51 +355,11 @@ def post_message(room_id):
     else:
         author = session.get('anon_id', 'Anon')
 
-    msg = Message(
-        room_id=room_id,
-        author=author,
-        text=text,
-        timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
-        reply_to=reply_to,
-        media=media or None,
-    )
-    db.session.add(msg)
-    db.session.commit()
-
-    # Determine 1-based index
-    msg_index = Message.query.filter_by(room_id=room_id).order_by(Message.id).count()
-    entry = {
-        'index': msg_index,
-        'author': msg.author,
-        'timestamp': msg.timestamp.isoformat(),
-        'text': msg.text,
-        'reply_to': str(msg.reply_to) if msg.reply_to else '',
-        'media': msg.media or '',
-        'room_id': room_id,
-    }
-    if entry['reply_to']:
-        ri = int(entry['reply_to'])
-        ref = Message.query.filter_by(room_id=room_id).order_by(Message.id).offset(ri - 1).first()
-        if ref:
-            entry['reply_author'] = ref.author
-            entry['reply_text'] = ref.text[:60]
-    socketio.emit('new_message', entry, room=room_id)
-    # Десктопные Bearer-клиенты слушают raw-WS /ws — уведомляем и их
-    reply_payload = None
-    if 'reply_author' in entry:
-        ref = Message.query.filter_by(room_id=room_id).order_by(Message.id) \
-            .offset(int(entry['reply_to']) - 1).first()
-        if ref:
-            reply_payload = {'id': ref.id, 'sender': ref.author, 'body': (ref.text or '')[:60]}
-    fanout_message(room.id, {
-        'id': msg.id,
-        'sender': msg.author,
-        'body': msg.text,
-        'created_at': msg.timestamp.isoformat(),
-        'client_msg_id': None,
-        'media': msg.media,
-        'reply_to': reply_payload,
-    })
+    # Вложение и ответ — у первой части, остальные части идут следом отдельными сообщениями
+    for i, chunk in enumerate(_split_text(text)):
+        if i and not chunk:
+            continue
+        _create_message(room, author, chunk, media if i == 0 else '', reply_to if i == 0 else None)
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'ok': True})
@@ -397,21 +384,16 @@ def upload_media(room_id):
     if not file or not file.filename:
         return jsonify({'ok': False, 'error': 'No file'}), 400
 
+    # Принимаем любое расширение: безопасность держится на отдаче —
+    # неизвестный тип уходит как octet-stream + attachment + nosniff (serve_media).
     ext = _ext_of(file.filename)
-    expected_mime = EXT_TO_MIME.get(ext)
-    if not expected_mime:
-        return jsonify({'ok': False, 'error': f'Расширение не разрешено: .{ext}'}), 415
-
-    # client_type — это user-controlled значение из multipart-заголовка.
-    # Принимаем расхождение (некоторые браузеры/ОС шлют пустой/octet-stream),
-    # но при отдаче используем СТРОГО expected_mime — без sniffing.
     media_dir = os.path.join(ROOMS_DIR, room_id, 'media')
     os.makedirs(media_dir, exist_ok=True)
 
     original_name = secure_filename(file.filename) or 'file'
     # Принудительно нормализуем расширение к нижнему регистру.
     safe_name = uuid.uuid4().hex + '_' + original_name
-    if not safe_name.lower().endswith('.' + ext):
+    if ext and not safe_name.lower().endswith('.' + ext):
         safe_name += '.' + ext
 
     file.save(os.path.join(media_dir, safe_name))

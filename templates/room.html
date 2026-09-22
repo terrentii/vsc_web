@@ -1,21 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Комната {{ room_id }} — МЫС Web{% endblock %}
 
-{% block extra_css %}
-<style>
-    #voice-panel { border-bottom: 1px solid var(--hairline); padding: 8px 12px; }
-    .voice-bar { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
-    .voice-tiles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-    .voice-tile { position: relative; border: 1px solid var(--hairline); background: var(--paper-2); padding: 4px 8px; }
-    .voice-tile.has-video { padding: 0; flex: 1 1 320px; max-width: 100%; }
-    .voice-tile video { display: block; width: 100%; max-height: 60vh; background: #000; }
-    .voice-tile-name { font-size: 12px; color: var(--muted); }
-    .voice-tile.has-video .voice-tile-name {
-        position: absolute; left: 4px; bottom: 4px;
-        background: rgba(0,0,0,.6); color: #fff; padding: 1px 5px;
-    }
-</style>
-{% endblock %}
 
 {% block menubar_route %}
 <span class="slash">/</span><span>rooms</span>
@@ -35,8 +20,6 @@
                 <span class="chat-header-id">{{ room_id }}</span>
             {% endif %}
             <span class="chat-header-spacer"></span>
-            <button class="btn btn-sm" type="button" id="voice-btn">Голос</button>
-            <button class="btn btn-sm" type="button" id="screen-btn" disabled>Экран</button>
             {% if config.personal_login %}
                 <span class="chat-header-pop" data-short="FAV">Личное</span>
             {% else %}
@@ -55,14 +38,6 @@
                     {% endif %}
                 {% endif %}
             {% endif %}
-        </div>
-
-        <div id="voice-panel" hidden>
-            <div class="voice-bar">
-                <span id="voice-status">не в канале</span>
-                <button class="btn btn-sm" type="button" id="mic-btn" disabled>Микрофон</button>
-            </div>
-            <div class="voice-tiles" id="voice-tiles"></div>
         </div>
 
         <div class="chat-messages" id="messages">
@@ -632,7 +607,6 @@
     bindEdit(messagesEl);
     bindDelete(messagesEl);
 </script>
-<script src="{{ url_for('static', filename='voice.js') }}?v=1"></script>
 {% endblock %}
 
 {% block statusbar_left %}Комната {{ room_id }} · {{ messages | length }} сообщ.{% endblock %}

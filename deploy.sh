@@ -56,7 +56,7 @@ say "Ставлю зависимости"
 
 say "Проверяю, что приложение импортируется"
 # Схема БД мигрируется сама при импорте app.py, поэтому это заодно и миграция.
-"$VENV/bin/python" -c 'import app, voice; print("модули ок, голосовой сигналинг подключён")' \
+"$VENV/bin/python" -c 'import app; print("модули ок")' \
     || die "приложение не импортируется — рестарт не делаю, прод остаётся на старой версии"
 
 # ── 3. TURN (опционально) ─────────────────────────────────────────────────
@@ -132,6 +132,34 @@ sudo mkdir -p "$(dirname "$DROPIN")"
 sudo chmod 600 "$DROPIN"   # внутри пароль TURN
 if [ -z "$TURN_PASS" ]; then warn "TURN не настроен: голос заработает только по STUN (одна сеть / простой NAT). Прогони с --turn."; fi
 
+# ── 4б. Таймер очистки медиа ──────────────────────────────────────────────
+# Приложение чистит само после каждой загрузки; таймер нужен на случай, когда
+# диск забивают не загрузки (логи, бэкапы), а чистить всё равно надо.
+say "Ставлю таймер очистки медиа (порог 70%)"
+sudo tee /etc/systemd/system/${SERVICE}-cleanup.service >/dev/null <<EOF
+[Unit]
+Description=Очистка медиа МЫС Web при заполнении диска
+
+[Service]
+Type=oneshot
+User=$(id -un)
+WorkingDirectory=$APP_DIR
+ExecStart=$VENV/bin/python $APP_DIR/media_cleanup.py
+EOF
+sudo tee /etc/systemd/system/${SERVICE}-cleanup.timer >/dev/null <<EOF
+[Unit]
+Description=Ежечасная проверка места под медиа МЫС Web
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now "${SERVICE}-cleanup.timer" >/dev/null
+
 # ── 5. Рестарт ────────────────────────────────────────────────────────────
 say "Перезапускаю $SERVICE"
 # Именно restart: reload оставит крутиться старый код.
@@ -153,7 +181,7 @@ ws="$(curl -s -i --max-time 5 \
         "$APP_URL/ws" | head -1 || true)"
 case "$ws" in
     *101*) echo "WebSocket-апгрейд на /ws → 101 ok" ;;
-    *)     warn "WebSocket-апгрейд не прошёл ($ws) — без него голос и чат откатятся на polling" ;;
+    *)     warn "WebSocket-апгрейд не прошёл ($ws) — без него чат откатится на polling" ;;
 esac
 
 if [ -n "$DOMAIN" ]; then
@@ -164,3 +192,4 @@ fi
 say "Готово"
 if [ "$WITH_TURN" -eq 1 ]; then echo "TURN: $DOMAIN:$TURN_PORT, пользователь $TURN_USER (пароль в $TURN_CONF)"; fi
 echo "Логи: sudo journalctl -u $SERVICE -f"
+echo "Очистка медиа: $VENV/bin/python $APP_DIR/media_cleanup.py --dry-run (таймер ${SERVICE}-cleanup.timer)"

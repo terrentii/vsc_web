@@ -78,12 +78,22 @@ ID комнаты — всегда 10 цифр, генерируется слу�
 
 Запускается на `http://localhost:5000`. Debug включён по умолчанию.
 
-Продакшн:
+Сервер с нуля (Debian/Ubuntu) — один скрипт:
 
-    SECRET_KEY=ваш-ключ gunicorn server:application
+    curl -fsSL https://raw.githubusercontent.com/terrentii/vsc_web/main/install.sh -o install.sh
+    bash install.sh --domain ваш-домен.ru
 
-Nginx-прокси обязан пробрасывать `X-Forwarded-Proto` — иначе CSRF
-не работает поверх HTTPS.
+Ставит пакеты, клонирует репозиторий, поднимает venv, systemd-сервис,
+nginx (с `client_max_body_size 0` и апгрейдом WebSocket на `/ws`, `/p2p`,
+`/socket.io`), сертификат Let's Encrypt — и передаёт управление `deploy.sh`.
+Флаги: `--no-nginx`, `--no-tls`.
+
+Обновление уже установленного сервера:
+
+    cd ~/vsc && ./deploy.sh
+
+Если ставите руками: nginx-прокси обязан пробрасывать `X-Forwarded-Proto` —
+иначе CSRF не работает поверх HTTPS, — и не ограничивать размер тела запроса.
 
 ---
 
@@ -96,7 +106,7 @@ Nginx-прокси обязан пробрасывать `X-Forwarded-Proto` —
     POST  /room/<id>/message        отправить сообщение
     POST  /room/<id>/message/<n>/edit
     POST  /room/<id>/message/<n>/delete
-    POST  /room/<id>/upload         загрузить медиа (макс. 5 ГБ)
+    POST  /room/<id>/upload         загрузить медиа (без ограничения размера и типа)
     GET   /room/<id>/media/<file>   отдать медиа (с проверкой доступа)
     GET   /room/<id>/messages/poll  AJAX-опрос новых сообщений
     GET   /room/<id>/manage         настройки комнаты (Прародитель)
