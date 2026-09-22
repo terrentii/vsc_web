@@ -116,7 +116,8 @@
       background: rgba(255,255,255,.04);
       border: 1px solid rgba(255,255,255,.18);
       color: var(--paper);
-      padding: 4px 10px;
+      height: 28px; box-sizing: border-box;
+      padding: 0 10px;
       font-family: var(--font-mono); font-size: 14px; font-weight: 700;
       letter-spacing: .14em; text-transform: uppercase;
       cursor: pointer;
@@ -133,10 +134,12 @@
       list-style: none; cursor: pointer;
       background: rgba(255,255,255,.04);
       border: 1px solid rgba(255,255,255,.18);
-      color: var(--paper);
-      padding: 4px 8px;
-      display: inline-flex; align-items: center;
-      transition: background .12s, border-color .12s;
+      /* тот же синий, что у значка темы: в обеих темах он читается на тёмном меню */
+      color: var(--mys-blue);
+      height: 28px; box-sizing: border-box;
+      padding: 0 9px;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background .12s, border-color .12s, color .12s;
     }
     .info-menu > summary::-webkit-details-marker { display: none; }
     .info-menu > summary::marker { content: ''; }
@@ -1051,7 +1054,8 @@
       .menubar-route, .menubar-divider { display: none; }
       .menubar-right { gap: 2px; }
       .menubar a, .menubar button.menu-btn { padding: 4px 8px; font-size: 14px; }
-      .theme-toggle { padding: 4px 6px; }
+      .theme-toggle { padding: 0 6px; }
+      .info-menu > summary { padding: 0 6px; }
       .theme-toggle .tt-label { display: none; }
       .user-badge { padding: 4px 6px; font-size: 14px; }
 
