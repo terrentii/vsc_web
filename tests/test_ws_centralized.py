@@ -266,3 +266,32 @@ def test_fanout_direct():
         with wsc._lock:
             wsc._ws_rooms.pop(mock_ws, None)
             wsc._subs.get(fake_room_id, set()).discard(mock_ws)
+
+
+def _ws_ready(live_server, token):
+    from websockets.sync.client import connect as ws_connect
+    ws = ws_connect(live_server.ws_url + '/ws', open_timeout=5)
+    ws.send(json.dumps({'type': 'auth', 'token': token}))
+    assert json.loads(ws.recv(timeout=5))['type'] == 'ready'
+    return ws
+
+
+def test_ws_receives_rooms_created_or_joined_after_connect(live_server):
+    """Подписка /ws не замораживается на момент подключения: комната, созданная
+    или найденная по коду ПОСЛЕ ready, сразу получает live-кадры."""
+    owner = live_server.register('late_owner', 'pw123456')
+    guest = live_server.register('late_guest', 'pw123456')
+    with _ws_ready(live_server, owner) as ws_owner, _ws_ready(live_server, guest) as ws_guest:
+        rid = live_server.create_room(owner, 'поздняя')
+        status, room = live_server._request(
+            'GET', '/api/rooms', headers={'Authorization': f'Bearer {owner}'})
+        code = next(r['code'] for r in room['rooms'] if r['id'] == rid)
+        status, _ = live_server._request(
+            'POST', '/api/rooms/join', data=json.dumps({'code': code}).encode(),
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {guest}'})
+        assert status == 200
+
+        live_server.post_message(owner, rid, 'живое', 'cid-late-1')
+        for ws in (ws_owner, ws_guest):
+            frame = json.loads(ws.recv(timeout=5))
+            assert frame['type'] == 'message' and frame['room_id'] == rid and frame['body'] == 'живое'

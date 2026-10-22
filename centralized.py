@@ -22,7 +22,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 from extensions import db, socketio
-from ws_centralized import fanout_message, fanout_event
+from ws_centralized import fanout_message, fanout_event, subscribe_user
 from models import User, AuthToken, Room, RoomMember, Message
 from bearer import issue_token, _hash_token, require_bearer
 from auth import (
@@ -57,6 +57,7 @@ def _room_dict(room: Room) -> dict:
         'name': room.name if room.name else None,
         'is_direct': room.personal_login is not None,
         'updated_at': _room_updated_at(room),
+        'code': room.room_id,  # 10-значный код — им делятся, чтобы позвать в комнату
     }
 
 
@@ -224,8 +225,39 @@ def api_create_room():
     db.session.add(member)
 
     db.session.commit()
+    subscribe_user(caller, room.id)
 
     return jsonify(_room_dict(room)), 201
+
+
+@central_bp.post('/rooms/join')
+@require_bearer
+def api_join_room():
+    """Войти в комнату по коду. Тело: {"code": "<10 цифр>"}.
+
+    Паритет с вебом (rooms._can_access_room/_track_room): открытая — вызывающий
+    становится участником (visitor); закрытая — только уже участник; личная —
+    только владелец."""
+    caller = g.caller_login
+    code = str((request.get_json(silent=True) or {}).get('code') or '').strip()
+    if not code.isdigit() or len(code) != 10:
+        return jsonify({'error': 'bad_request'}), 400
+    room = Room.query.filter_by(room_id=code).first()
+    if room is None:
+        return jsonify({'error': 'not_found'}), 404
+    is_member = RoomMember.query.filter_by(room_id=code, login=caller).first() is not None
+    if room.personal_login:
+        allowed = room.personal_login == caller
+    else:
+        allowed = room.is_open or is_member
+    if not allowed:
+        return jsonify({'error': 'forbidden'}), 403
+    if not is_member:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        db.session.add(RoomMember(room_id=code, login=caller, joined_at=now, role='visitor'))
+        db.session.commit()
+    subscribe_user(caller, room.id)
+    return jsonify(_room_dict(room))
 
 
 # ── Вложения (Bearer) ──────────────────────────────────────────────────────────

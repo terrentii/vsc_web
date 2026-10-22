@@ -14,8 +14,10 @@ import argparse
 import os
 import shutil
 
-ROOMS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rooms')
-THRESHOLD = 0.70
+# Переопределяются окружением — тесты уводят их во временный каталог и
+# выключают очистку, чтобы не стереть настоящие медиа на почти полном диске.
+ROOMS_DIR = os.environ.get('ROOMS_DIR') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rooms')
+THRESHOLD = float(os.environ.get('MEDIA_CLEANUP_THRESHOLD', '0.70'))
 
 PHOTO_EXTS = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'heic', 'avif'}
 

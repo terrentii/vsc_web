@@ -24,6 +24,7 @@ ws_bp = Blueprint('ws_centralized', __name__)
 
 _subs: dict[int, set] = {}            # Room.id (int PK) -> set(ws)
 _ws_rooms: dict[object, set] = {}     # ws -> set(Room.id)
+_ws_login: dict[object, str] = {}     # ws -> login (для подписки на новые комнаты)
 _lock = threading.Lock()
 
 
@@ -50,6 +51,17 @@ def fanout_event(room_db_id: int, payload: dict) -> None:
             ws.send(frame)
         except Exception:
             pass
+
+
+def subscribe_user(login: str, room_db_id: int) -> None:
+    """Подписать открытые /ws-соединения пользователя на комнату, в которую он
+    вошёл или которую создал уже после подключения (иначе live-кадры не шли бы
+    до переподключения — набор комнат считается при авторизации)."""
+    with _lock:
+        for ws, owner in _ws_login.items():
+            if owner == login:
+                _ws_rooms.setdefault(ws, set()).add(room_db_id)
+                _subs.setdefault(room_db_id, set()).add(ws)
 
 
 def fanout_message(room_db_id: int, payload: dict) -> None:
@@ -88,6 +100,7 @@ def ws_centralized(ws):
     room_ids = _rooms_for(login)
     with _lock:
         _ws_rooms[ws] = set(room_ids)
+        _ws_login[ws] = login
         for rid in room_ids:
             _subs.setdefault(rid, set()).add(ws)
 
@@ -100,5 +113,6 @@ def ws_centralized(ws):
             # Входящие кадры после авторизации игнорируем (протокол push-only)
     finally:
         with _lock:
+            _ws_login.pop(ws, None)
             for rid in _ws_rooms.pop(ws, ()):
                 _subs.get(rid, set()).discard(ws)
