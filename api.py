@@ -124,6 +124,10 @@ def list_rooms():
     if _login:
         from centralized import bearer_list_rooms
         return bearer_list_rooms(_login)
+    if request.headers.get('Authorization', '').startswith('Bearer '):
+        # Токен прислан, но недействителен — 401, а не публичный список:
+        # иначе клиент не узнает, что сессия протухла.
+        return jsonify({'error': 'unauthorized'}), 401
 
     rooms = (
         Room.query

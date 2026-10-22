@@ -459,3 +459,11 @@ def test_reply_to_image_message_quotes_placeholder(client):
         'reply_to': m['id'],
     }, headers=h).get_json()
     assert r['reply_to']['body'] == 'Изображение'
+
+
+def test_list_rooms_dead_bearer_is_401_not_public_list(client):
+    """Протухший Bearer — 401, а не публичный список: иначе клиент не узнает,
+    что сессия умерла (получит чужой формат ответа)."""
+    r = client.get('/api/rooms', headers={'Authorization': 'Bearer deadbeef'})
+    assert r.status_code == 401
+    assert client.get('/api/rooms').status_code == 200  # без заголовка — как раньше
