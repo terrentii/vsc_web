@@ -61,7 +61,7 @@ def test_create_and_list_rooms(client):
     r = client.post('/api/rooms', json={'name': 'проект'}, headers=h)
     assert r.status_code == 201
     created = r.get_json()
-    assert set(created) == {'id', 'name', 'is_direct', 'updated_at'}
+    assert set(created) == {'id', 'name', 'is_direct', 'updated_at', 'code'}
     assert created['is_direct'] is False
     assert created['name'] == 'проект'
     assert isinstance(created['id'], int)
