@@ -22,7 +22,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 from extensions import db, socketio
-from ws_centralized import fanout_message, fanout_event
+from ws_centralized import fanout_message, fanout_event, subscribe_user
 from models import User, AuthToken, Room, RoomMember, Message
 from bearer import issue_token, _hash_token, require_bearer
 from auth import (
@@ -225,6 +225,7 @@ def api_create_room():
     db.session.add(member)
 
     db.session.commit()
+    subscribe_user(caller, room.id)
 
     return jsonify(_room_dict(room)), 201
 
@@ -255,6 +256,7 @@ def api_join_room():
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         db.session.add(RoomMember(room_id=code, login=caller, joined_at=now, role='visitor'))
         db.session.commit()
+    subscribe_user(caller, room.id)
     return jsonify(_room_dict(room))
 
 
