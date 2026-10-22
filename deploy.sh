@@ -5,6 +5,8 @@
 #   ./deploy.sh                          обычное обновление
 #   ./deploy.sh --turn                   плюс поставить и настроить coturn
 #   ./deploy.sh --turn --domain x.ru     то же, но realm задать явно
+#   ./deploy.sh --stun                   только STUN (coturn stun-only, 3478/udp) —
+#                                        прямой канал P2P (WebRTC) телефона и десктопа
 #
 # ponytail: один файл, никакого ansible. Если деплоев станет больше одного
 # сервера — вот тогда и заводить нормальный инструмент.
@@ -22,12 +24,14 @@ RELAY_MIN=49160
 RELAY_MAX=49200
 
 WITH_TURN=0
+WITH_STUN=0
 DOMAIN=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --turn)   WITH_TURN=1 ;;
+        --stun)   WITH_STUN=1 ;;
         --domain) DOMAIN="${2:?--domain требует аргумент}"; shift ;;
-        -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
         *) echo "неизвестный аргумент: $1" >&2; exit 2 ;;
     esac
     shift
@@ -111,6 +115,32 @@ EOF
 
 else
     if [ -z "$DOMAIN" ]; then DOMAIN="$TURN_REALM"; fi
+fi
+
+# ── 3б. STUN для прямого канала P2P ─────────────────────────────────────
+# Клиенты (телефон, десктоп) ходят на stun:<домен>:3478, чтобы узнать свой
+# внешний адрес для WebRTC. Нужен только STUN: без паролей и relay-портов
+# (relay у нас свой — /p2p). При --turn тот же coturn отвечает и на STUN.
+if [ "$WITH_STUN" -eq 1 ] && [ "$WITH_TURN" -eq 0 ]; then
+    say "Настраиваю coturn в режиме STUN-only"
+    command -v turnserver >/dev/null || sudo apt-get install -y coturn
+    sudo tee "$TURN_CONF" >/dev/null <<STUNCONF
+# Сгенерировано deploy.sh --stun — правки перезапишутся при следующем запуске.
+# Только STUN Binding: TURN-relay выключен, учётных записей нет.
+listening-port=$TURN_PORT
+stun-only
+fingerprint
+no-tls
+no-dtls
+STUNCONF
+    sudo sed -i 's/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn 2>/dev/null || true
+    sudo systemctl enable --now coturn
+    sudo systemctl restart coturn
+    if command -v ufw >/dev/null && sudo ufw status | grep -q '^Status: active'; then
+        sudo ufw allow "$TURN_PORT"/udp
+    else
+        warn "ufw не активен — открой порт $TURN_PORT/udp сам"
+    fi
 fi
 
 # ── 4. Окружение сервиса ──────────────────────────────────────────────────
