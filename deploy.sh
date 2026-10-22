@@ -78,7 +78,8 @@ if [ "$WITH_TURN" -eq 1 ]; then
     if [ -z "$DOMAIN" ]; then DOMAIN="${TURN_REALM:-$(hostname -f)}"; fi
     say "Настраиваю coturn (realm $DOMAIN)"
 
-    command -v turnserver >/dev/null || sudo apt-get install -y coturn
+    # update — иначе устаревшие списки пакетов дают 404 на обновлённых зависимостях
+    command -v turnserver >/dev/null || { sudo apt-get update && sudo apt-get install -y coturn; }
 
     # Пароль генерим один раз и переиспользуем — иначе каждый деплой рвал бы
     # уже работающие соединения.
@@ -123,7 +124,8 @@ fi
 # (relay у нас свой — /p2p). При --turn тот же coturn отвечает и на STUN.
 if [ "$WITH_STUN" -eq 1 ] && [ "$WITH_TURN" -eq 0 ]; then
     say "Настраиваю coturn в режиме STUN-only"
-    command -v turnserver >/dev/null || sudo apt-get install -y coturn
+    # update — иначе устаревшие списки пакетов дают 404 на обновлённых зависимостях
+    command -v turnserver >/dev/null || { sudo apt-get update && sudo apt-get install -y coturn; }
     sudo tee "$TURN_CONF" >/dev/null <<STUNCONF
 # Сгенерировано deploy.sh --stun — правки перезапишутся при следующем запуске.
 # Только STUN Binding: TURN-relay выключен, учётных записей нет.
