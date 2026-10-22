@@ -24,6 +24,10 @@ os.environ.setdefault('DATABASE_URL', f'sqlite:///{_db_path}')
 os.environ.setdefault('SECRET_KEY', 'test-secret-key-not-for-production')
 # Disable session filesystem storage to avoid permission issues in CI
 os.environ.setdefault('SESSION_TYPE', 'null')
+# Медиа — во временный каталог, очистка по диску выключена: иначе тесты
+# писали бы в настоящий rooms/ и на почти полном диске стирали бы его.
+os.environ['ROOMS_DIR'] = tempfile.mkdtemp(prefix='vsc_test_rooms_')
+os.environ['MEDIA_CLEANUP_THRESHOLD'] = '1.0'
 
 # Ensure vsc_web root is on sys.path for `import app`, `import extensions`, etc.
 _vsc_web_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

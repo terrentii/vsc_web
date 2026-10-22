@@ -11,13 +11,12 @@ from flask_socketio import join_room as sio_join_room, emit as sio_emit
 from werkzeug.utils import secure_filename
 
 from extensions import db, socketio
-from media_cleanup import cleanup as _cleanup_media
+from media_cleanup import ROOMS_DIR, cleanup as _cleanup_media
 from models import Room, Message, RoomMember
 from ws_centralized import fanout_message, fanout_event
 
 rooms_bp = Blueprint('rooms', __name__)
 
-ROOMS_DIR = os.path.join(os.path.dirname(__file__), 'rooms')
 MAX_TEXT = 4000  # длиннее — сообщение уходит несколькими частями
 
 # SVG исключён намеренно: содержит исполняемый JS, отдача inline = stored XSS.

@@ -233,13 +233,19 @@ def test_upload_media_requires_bearer(client):
     assert r.status_code == 401
 
 
-def test_upload_media_rejects_bad_extension(client):
+def test_upload_media_any_extension_served_as_octet_stream(client):
+    """Лимиты на расширения сняты (b7cfe1d), но неизвестный тип (svg может нести
+    скрипт) отдаётся как octet-stream — не рендерится браузером инлайн."""
     h = _auth(client, 'up2')
     rid = _room(client, h)
     r = client.post(f'/api/rooms/{rid}/media',
                      data={'file': (io.BytesIO(b'<svg/>'), 'x.svg')},
                      content_type='multipart/form-data', headers=h)
-    assert r.status_code == 415
+    assert r.status_code == 201
+    assert r.get_json()['mime_type'] == 'application/octet-stream'
+    got = client.get(f"/api/rooms/{rid}/media/{r.get_json()['filename']}", headers=h)
+    assert got.status_code == 200
+    assert got.headers['Content-Type'].startswith('application/octet-stream')
 
 
 def test_upload_media_success_returns_filename_mime_size(client):
