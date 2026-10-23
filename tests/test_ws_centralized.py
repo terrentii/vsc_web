@@ -157,6 +157,7 @@ def live_server():
         'SECRET_KEY': 'ws-test-secret',
         # Disable filesystem session to avoid permission issues
         'SESSION_TYPE': 'null',
+        'WS_PING_INTERVAL': '1',
     }
 
     proc = subprocess.Popen(
@@ -295,3 +296,27 @@ def test_ws_receives_rooms_created_or_joined_after_connect(live_server):
         for ws in (ws_owner, ws_guest):
             frame = json.loads(ws.recv(timeout=5))
             assert frame['type'] == 'message' and frame['room_id'] == rid and frame['body'] == 'живое'
+
+
+def test_ws_dead_client_dropped_by_ping(live_server):
+    """Клиент перестал отвечать на ping (потерял сеть) — сервер закрывает /ws (а с ним «в сети»)."""
+    import base64
+    import struct
+    token = live_server.register('pingless', 'pw123456')
+    s = socket.create_connection(('127.0.0.1', live_server.port), timeout=10)
+    key = base64.b64encode(os.urandom(16)).decode()
+    s.sendall((f'GET /ws HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+               f'Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n').encode())
+    assert b' 101 ' in s.recv(4096)
+    payload = json.dumps({'type': 'auth', 'token': token}).encode()
+    mask = os.urandom(4)
+    s.sendall(bytes([0x81, 0x80 | len(payload)]) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+    # pong не шлём: сервер должен закрыть соединение за ~2 интервала ping
+    start = time.monotonic()
+    while True:
+        chunk = s.recv(4096)
+        if not chunk or b'\x88' in chunk[:1]:  # EOF или кадр close
+            break
+        assert time.monotonic() - start < 8, 'сервер не закрыл мёртвое соединение'
+    assert time.monotonic() - start < 8
+    s.close()
