@@ -17,6 +17,7 @@ from flask import Blueprint
 from flask_sock import Sock
 
 from bearer import resolve_bearer_token
+from extensions import db
 from models import Room, RoomMember
 
 sock = Sock()                          # init_app вызывается в app.py
@@ -64,6 +65,15 @@ def subscribe_user(login: str, room_db_id: int) -> None:
                 _subs.setdefault(room_db_id, set()).add(ws)
 
 
+def unsubscribe_user(login: str, room_db_id: int) -> None:
+    """Отписать соединения пользователя от комнаты (выгнали, вышел, комната удалена)."""
+    with _lock:
+        for ws, owner in _ws_login.items():
+            if owner == login:
+                _ws_rooms.get(ws, set()).discard(room_db_id)
+                _subs.get(room_db_id, set()).discard(ws)
+
+
 def fanout_message(room_db_id: int, payload: dict) -> None:
     """Отправить payload всем подписанным WebSocket-соединениям комнаты.
 
@@ -104,15 +114,24 @@ def ws_centralized(ws):
         for rid in room_ids:
             _subs.setdefault(rid, set()).add(ws)
 
-    # Шаг 3: держим соединение открытым, пока клиент не закроет его
+    # Шаг 3: держим соединение открытым; онлайн — пока оно живо (диалоги)
+    import dialogs  # ленивый импорт: dialogs импортирует этот модуль
+    dialogs.connected(login)
     try:
         while True:
             data = ws.receive()
             if data is None:
                 break
-            # Входящие кадры после авторизации игнорируем (протокол push-only)
+            # Единственный входящий кадр — «печатает» в диалоге; прочее игнорируем
+            try:
+                frame = json.loads(data)
+                if frame.get("type") == "typing":
+                    dialogs.typing(db.session.get(Room, int(frame.get("room_id"))), login)
+            except Exception:
+                pass
     finally:
         with _lock:
             _ws_login.pop(ws, None)
             for rid in _ws_rooms.pop(ws, ()):
                 _subs.get(rid, set()).discard(ws)
+        dialogs.disconnected(login)

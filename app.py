@@ -99,6 +99,9 @@ app.register_blueprint(rooms_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
 app.register_blueprint(central_bp, url_prefix='/api')
 csrf.exempt(central_bp)   # Bearer-эндпоинты без CSRF
+from dialogs import dialogs_bp  # noqa: E402 — после blueprint'ов, от которых зависит
+app.register_blueprint(dialogs_bp, url_prefix='/api')
+csrf.exempt(dialogs_bp)   # Bearer: настройки комнат, диалоги, аватарки
 app.register_blueprint(ws_bp)
 sock.init_app(app)
 csrf.exempt(ws_bp)        # WS-эндпоинт не использует CSRF
@@ -138,6 +141,34 @@ with app.app_context():
                 _conn.commit()
     except Exception:
         pass  # таблица ещё не создана — create_all создаст с нужной колонкой
+
+    # Диалоги, аватарки, приватность (dialogs.py): недостающие колонки — ALTER TABLE.
+    def _add_columns(table, columns):
+        try:
+            from sqlalchemy import text, inspect as sa_inspect
+            insp = sa_inspect(db.engine)
+            if table not in insp.get_table_names():
+                return
+            have = {c['name'] for c in insp.get_columns(table)}
+            with db.engine.connect() as _conn:
+                for col, ddl in columns.items():
+                    if col not in have:
+                        _conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {col} {ddl}'))
+                _conn.commit()
+        except Exception:
+            pass
+
+    _add_columns('rooms', {
+        'is_dialog': 'BOOLEAN NOT NULL DEFAULT 0', 'dialog_proposed_by': 'VARCHAR(64)',
+        'avatar': 'VARCHAR(64)', 'avatar_rev': 'INTEGER NOT NULL DEFAULT 0',
+    })
+    _add_columns('room_members', {
+        'title': 'VARCHAR(64)', 'avatar': 'VARCHAR(64)',
+        'avatar_rev': 'INTEGER NOT NULL DEFAULT 0', 'last_read': 'INTEGER',
+    })
+    _add_columns('users', {
+        'share_read': 'BOOLEAN NOT NULL DEFAULT 1', 'share_online': 'BOOLEAN NOT NULL DEFAULT 1',
+    })
 
     # Создаём отсутствующие таблицы (в т.ч. новую auth_tokens) при каждом старте.
     # Идемпотентно: существующие таблицы не трогаются. Нужно здесь, а не только
@@ -209,17 +240,39 @@ def render_text_filter(text):
 
 
 def get_room_info(room_id):
-    """Return dict with id, name, is_open for sidebar display."""
+    """Комната для боковой панели: название/аватарка глазами текущего пользователя."""
     from models import Room
+    import dialogs
     room = Room.query.filter_by(room_id=room_id).first()
-    if room:
-        return {'id': room_id, 'name': room.name or '', 'is_open': room.is_open}
-    return {'id': room_id, 'name': '', 'is_open': True}
+    if not room:
+        return {'id': room_id, 'name': '', 'is_open': True, 'title': '', 'avatar_rev': 0, 'is_dialog': False}
+    login = session.get('login') if session.get('user_type') == 'registered' else None
+    if login and dialogs.member(room, login):
+        v = dialogs.room_view(room, login)
+        return {'id': room_id, 'name': room.name or '', 'is_open': room.is_open,
+                'title': v['title'] or '', 'avatar_rev': v['avatar_rev'], 'is_dialog': v['is_dialog'],
+                'invited': v['role'] == 'invited'}
+    return {'id': room_id, 'name': room.name or '', 'is_open': room.is_open,
+            'title': room.name or '', 'avatar_rev': room.avatar_rev if room.avatar else 0, 'is_dialog': False}
+
+
+def get_invites():
+    """Приглашения в диалог для текущего пользователя: [(код, от кого)]."""
+    from models import Room, RoomMember
+    if session.get('user_type') != 'registered':
+        return []
+    out = []
+    for m in RoomMember.query.filter_by(login=session.get('login'), role='invited').all():
+        room = Room.query.filter_by(room_id=m.room_id).first()
+        if room is not None:
+            out.append((room.room_id, room.dialog_proposed_by or room.creator_login))
+    return out
 
 
 @app.context_processor
 def inject_room_helpers():
-    return {'room_display_name': get_room_display_name, 'get_room_info': get_room_info}
+    return {'room_display_name': get_room_display_name, 'get_room_info': get_room_info,
+            'get_invites': get_invites}
 
 
 def _sign_anon(fp: str) -> str:

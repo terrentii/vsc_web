@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Настройки — {{ view.title or room_id }}{% endblock %}
+
+{% block menubar_route %}
+<span class="slash">/</span><span>rooms</span>
+<span class="slash">/</span><span>{{ room_id }}</span>
+<span class="slash">/</span><span>settings</span>
+{% endblock %}
+
+{% macro avatar(size) -%}
+    {% if view.avatar_rev %}
+        <img class="avatar" style="width:{{ size }}px;height:{{ size }}px"
+             src="{{ url_for('rooms.room_avatar', room_id=room_id, rev=view.avatar_rev) }}" alt="">
+    {% else %}
+        <span class="avatar avatar-mono" style="width:{{ size }}px;height:{{ size }}px;font-size:{{ size // 2 }}px">{{ ((view.title or room_id)[:1]) | upper }}</span>
+    {% endif %}
+{%- endmacro %}
+
+{% macro act_button(action, label, cls='') -%}
+<form method="post" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="{{ action }}">
+    <button class="btn btn-sm {{ cls }}" type="submit">{{ label }}</button>
+</form>
+{%- endmacro %}
+
+{% block content %}
+<div class="manage-shell">
+    <div class="manage-card">
+        <header class="manage-head">
+            <div class="settings-head">
+                {{ avatar(64) }}
+                <div>
+                    <div class="h-eyebrow">◢ {{ 'Диалог' if view.is_dialog else 'Настройки комнаты' }}</div>
+                    <div class="h-title">{{ view.title or ('Комната ' ~ room_id) }}</div>
+                </div>
+            </div>
+            <div class="h-id">ID&nbsp;<strong>{{ room_id }}</strong></div>
+        </header>
+
+        <div class="manage-body">
+            {% if error %}<div class="error-msg">{{ error }}</div>{% endif %}
+
+            {# ── Диалог: предложение / приглашение ── #}
+            {% if not view.is_dialog and view.dialog_proposed_by %}
+                <div class="dialog-banner">
+                    {% if view.dialog_proposed_by == me.login %}
+                        <span>Вы предложили {{ view.peer }} перейти в диалог — ждём ответа.</span>
+                        {{ act_button('decline', 'Отозвать') }}
+                    {% else %}
+                        <span><strong>{{ view.dialog_proposed_by }}</strong> {{ 'приглашает вас в диалог' if view.role == 'invited' else 'предлагает сделать комнату диалогом' }}.</span>
+                        {{ act_button('accept', 'Принять', 'btn-primary') }}
+                        {{ act_button('decline', 'Отклонить') }}
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            {% if view.is_dialog %}
+                <div class="manage-section-title"><span>Как вы видите этот диалог</span></div>
+                <form method="post" class="manage-row" style="align-items:end;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="title">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>Моё название</label>
+                        <p class="hint-block">Видите только вы; пусто — логин собеседника.</p>
+                        <input type="text" name="title" value="{{ view.title if view.title != view.peer else '' }}" maxlength="64" placeholder="{{ view.peer }}">
+                    </div>
+                    <div><button class="btn btn-primary" type="submit">Сохранить</button></div>
+                </form>
+            {% elif is_creator %}
+                <div class="manage-section-title"><span>Общее</span></div>
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="general">
+                    <div class="manage-row">
+                        <div class="form-group">
+                            <label>Название комнаты <span class="hint">опционально</span></label>
+                            <input type="text" name="room_name" value="{{ room.name }}" placeholder="Пусто — показывать ID" maxlength="64">
+                        </div>
+                        <div class="form-group">
+                            <label>Тип комнаты</label>
+                            <select name="is_open">
+                                <option value="true" {% if room.is_open %}selected{% endif %}>Открытая — любой с ID</option>
+                                <option value="false" {% if not room.is_open %}selected{% endif %}>Закрытая — только участники</option>
+                            </select>
+                        </div>
+                    </div>
+                    <label class="check-row">
+                        <input type="checkbox" name="tg_visible" {{ 'checked' if room.tg_visible else '' }}>
+                        Показывать комнату в Telegram-боте <span class="hint">только для открытых</span>
+                    </label>
+                    <button class="btn btn-primary" type="submit">Сохранить</button>
+                </form>
+            {% endif %}
+
+            {% if view.is_dialog or is_creator %}
+                <div class="manage-section-title" style="margin-top:22px;">
+                    <span>{{ 'Моя аватарка диалога' if view.is_dialog else 'Аватарка комнаты' }}</span>
+                </div>
+                <div class="avatar-row">
+                    {{ avatar(96) }}
+                    <form method="post" enctype="multipart/form-data" class="avatar-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="avatar">
+                        <label class="btn btn-sm">Выбрать картинку
+                            <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp"
+                                   style="display:none" onchange="this.form.submit()">
+                        </label>
+                        <span class="hint-block">PNG, JPEG, WebP до 5 МБ; метаданные фото удаляются.</span>
+                    </form>
+                    {% if view.avatar_rev %}{{ act_button('avatar_delete', 'Убрать') }}{% endif %}
+                </div>
+            {% endif %}
+
+            {# ── Участники ── #}
+            {% if not view.is_dialog %}
+                <div class="manage-section-title" style="margin-top:22px;">
+                    <span>Участники</span><span class="count">{{ members | length }}</span>
+                </div>
+                <div class="users-table-wrap">
+                    <table class="users-table">
+                        <tbody>
+                        {% for m in members %}
+                            <tr>
+                                <td class="td-login">{{ m.login }}</td>
+                                <td class="td-role{% if m.role == 'godfather' %} founder{% endif %}">
+                                    {{ {'godfather': 'Прародитель', 'invited': 'Приглашён'}.get(m.role, 'Участник') }}
+                                </td>
+                                <td class="td-action">
+                                    {% if is_creator and m.login != me.login %}
+                                        <form method="post" style="display:inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="action" value="kick">
+                                            <input type="hidden" name="login" value="{{ m.login }}">
+                                            <button class="btn btn-sm btn-warn-outline" type="submit">Удалить</button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if is_creator and not room.personal_login %}
+                    <form method="post" class="manage-row" style="align-items:end;margin-top:12px;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="add">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label>Добавить по логину</label>
+                            <input type="text" name="login" placeholder="например, gorlum" required>
+                        </div>
+                        <div><button class="btn" type="submit">Добавить</button></div>
+                    </form>
+                {% endif %}
+            {% endif %}
+
+            {# ── Диалог: включить / выключить ── #}
+            {% if not room.personal_login %}
+                <div class="manage-section-title" style="margin-top:22px;"><span>Диалог</span></div>
+                {% if view.is_dialog %}
+                    <p class="hint-block">Закрытая комната только для вас и {{ view.peer }}: сообщения пузырями, «прочитано», «печатает», «в сети».</p>
+                    {{ act_button('disable', 'Выключить диалог') }}
+                {% elif eligible and not view.dialog_proposed_by %}
+                    <p class="hint-block">В комнате двое — её можно превратить в личный диалог. {{ view.peer }} должен согласиться.</p>
+                    {{ act_button('propose', 'Сделать диалогом', 'btn-primary') }}
+                {% elif not view.dialog_proposed_by %}
+                    <p class="hint-block">Диалог возможен, когда в комнате ровно два зарегистрированных участника.</p>
+                {% endif %}
+
+                <div class="manage-section-title" style="margin-top:22px;"><span>Приватность (все диалоги)</span></div>
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="privacy">
+                    <label class="check-row"><input type="checkbox" name="share_read" {{ 'checked' if me.share_read else '' }}> Показывать, что я прочитал</label>
+                    <label class="check-row"><input type="checkbox" name="share_online" {{ 'checked' if me.share_online else '' }}> Показывать, что я в сети</label>
+                    <button class="btn btn-sm" type="submit">Сохранить</button>
+                </form>
+            {% endif %}
+
+            <div class="manage-actions">
+                <a class="back" href="{{ url_for('rooms.room', room_id=room_id) }}">← Назад в комнату</a>
+                <div></div>
+            </div>
+
+            <div class="manage-danger-zone">
+                {% if is_creator %}
+                    <form action="{{ url_for('rooms.delete_room', room_id=room_id) }}" method="post"
+                          onsubmit="return confirm('Удалить комнату? Все сообщения будут потеряны.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-danger btn-sm" type="submit">Удалить комнату</button>
+                    </form>
+                {% else %}
+                    {{ act_button('leave', 'Покинуть', 'btn-danger btn-sm') }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+
+{% block statusbar_left %}Настройки комнаты {{ room_id }}{% endblock %}

@@ -28,6 +28,9 @@ class User(UserMixin, db.Model):
     login = db.Column(db.String(64), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    # Приватность диалогов: показывать собеседнику «прочитано» и «в сети»
+    share_read = db.Column(db.Boolean, default=True, nullable=False)
+    share_online = db.Column(db.Boolean, default=True, nullable=False)
 
     def get_id(self):
         return self.login
@@ -44,6 +47,11 @@ class Room(db.Model):
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     creator_login = db.Column(db.String(64), nullable=False)
     personal_login = db.Column(db.String(64), unique=True, nullable=True, index=True)
+    # Диалог — закрытая комната ровно на двух зарегистрированных (см. dialogs.py)
+    is_dialog = db.Column(db.Boolean, default=False, nullable=False)
+    dialog_proposed_by = db.Column(db.String(64), nullable=True)
+    avatar = db.Column(db.String(64), nullable=True)
+    avatar_rev = db.Column(db.Integer, default=0, nullable=False)
 
     messages = db.relationship('Message', backref='room', lazy='dynamic',
                                cascade='all, delete-orphan',
@@ -79,7 +87,12 @@ class RoomMember(db.Model):
     room_id = db.Column(db.String(10), db.ForeignKey('rooms.room_id'), nullable=False, index=True)
     login = db.Column(db.String(64), nullable=False, index=True)
     joined_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
-    role = db.Column(db.String(20), default='member', nullable=False)
+    role = db.Column(db.String(20), default='member', nullable=False)  # godfather/member/visitor/invited
+    # В диалоге — своё название и аватарка (видит только сам участник)
+    title = db.Column(db.String(64), nullable=True)
+    avatar = db.Column(db.String(64), nullable=True)
+    avatar_rev = db.Column(db.Integer, default=0, nullable=False)
+    last_read = db.Column(db.Integer, nullable=True)  # Message.id последнего прочитанного
 
     __table_args__ = (db.UniqueConstraint('room_id', 'login', name='uq_room_member'),)
 

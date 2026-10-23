@@ -24,6 +24,7 @@ from werkzeug.utils import secure_filename
 from extensions import db, socketio
 from ws_centralized import fanout_message, fanout_event, subscribe_user
 from models import User, AuthToken, Room, RoomMember, Message
+import dialogs
 from bearer import issue_token, _hash_token, require_bearer
 from auth import (
     LOGIN_RE, ANON_RE,
@@ -50,15 +51,9 @@ def _room_updated_at(room: Room) -> str:
     return (last_ts or room.created_at).isoformat()
 
 
-def _room_dict(room: Room) -> dict:
-    """Сериализует комнату в формат Bearer-ответа."""
-    return {
-        'id': room.id,
-        'name': room.name if room.name else None,
-        'is_direct': room.personal_login is not None,
-        'updated_at': _room_updated_at(room),
-        'code': room.room_id,  # 10-значный код — им делятся, чтобы позвать в комнату
-    }
+def _room_dict(room: Room, login: str) -> dict:
+    """Комната глазами login (Bearer-ответ): базовые поля + диалог/аватар/собеседник."""
+    return dialogs.room_view(room, login)
 
 
 def _msg_index(m: Message) -> int:
@@ -120,7 +115,7 @@ def bearer_list_rooms(login: str):
     if not str_room_ids:
         return jsonify({'rooms': []})
     rooms = Room.query.filter(Room.room_id.in_(str_room_ids)).all()
-    return jsonify({'rooms': [_room_dict(r) for r in rooms]})
+    return jsonify({'rooms': [_room_dict(r, login) for r in rooms]})
 
 
 @central_bp.post('/auth/register')
@@ -227,7 +222,7 @@ def api_create_room():
     db.session.commit()
     subscribe_user(caller, room.id)
 
-    return jsonify(_room_dict(room)), 201
+    return jsonify(_room_dict(room, caller)), 201
 
 
 @central_bp.post('/rooms/join')
@@ -255,9 +250,10 @@ def api_join_room():
     if not is_member:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         db.session.add(RoomMember(room_id=code, login=caller, joined_at=now, role='visitor'))
+        dialogs.membership_changed(room)  # третий участник — предложение диалога сгорает
         db.session.commit()
     subscribe_user(caller, room.id)
-    return jsonify(_room_dict(room))
+    return jsonify(_room_dict(room, caller))
 
 
 # ── Вложения (Bearer) ──────────────────────────────────────────────────────────
@@ -351,6 +347,8 @@ def api_post_message():
     member = RoomMember.query.filter_by(room_id=room.room_id, login=caller).first()
     if not member:
         return jsonify({'error': 'forbidden'}), 403
+    if dialogs.pending_invite(room):
+        return jsonify({'error': 'pending_invite'}), 403  # писать — после принятия приглашения
 
     # Идемпотентность: вернуть существующее сообщение, если client_msg_id уже есть
     if client_msg_id:
@@ -396,6 +394,7 @@ def api_post_message():
     fanout_message(room.id, payload)
     # Веб-клиенты слушают socketio 'new_message' (формат rooms.py, index-based)
     entry = {
+        'id': m.id,
         'index': _msg_index(m),
         'author': m.author,
         'timestamp': m.timestamp.isoformat(),
