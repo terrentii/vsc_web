@@ -140,6 +140,7 @@ def room_view(room, login) -> dict:
         'is_direct': room.personal_login is not None, 'updated_at': room_updated_at(room),
         'is_open': bool(room.is_open), 'is_dialog': bool(room.is_dialog),
         'dialog_proposed_by': room.dialog_proposed_by,
+        'pending_invite': pending_invite(room),
         'role': me.role if me else None, 'title': title, 'avatar_rev': avatar_rev,
         'peer': peer.login if peer else None,
         'peer_read': peer.last_read if live and peer_user.share_read else None,

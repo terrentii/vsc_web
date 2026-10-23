@@ -12,34 +12,59 @@
     {% set current_room = room_id %}
     {% include '_sidebar.html' %}
 
-    <div class="chat-panel">
+    {% set is_dialog = view and view.is_dialog %}
+    <div class="chat-panel{% if is_dialog %} is-dialog{% endif %}">
         <div class="chat-header">
-            {% set display_name = config.name if config.name else room_id %}
-            <span class="chat-header-name">{{ display_name }}</span>
-            {% if config.name %}
+            {% set display_name = (view.title if view and view.title else (config.name if config.name else room_id)) %}
+            {% if view and not config.personal_login %}
+                {% if view.avatar_rev %}
+                    <img class="avatar avatar-md" src="{{ url_for('rooms.room_avatar', room_id=room_id, rev=view.avatar_rev) }}" alt="">
+                {% else %}
+                    <span class="avatar avatar-mono avatar-md">{{ display_name[:1] | upper }}</span>
+                {% endif %}
+            {% endif %}
+            <div class="chat-header-titles">
+                <span class="chat-header-name">{{ display_name }}</span>
+                {% if is_dialog %}
+                    <span class="chat-header-status" id="peer-status">{{ 'в сети' if view.peer_online else '' }}</span>
+                {% endif %}
+            </div>
+            {% if config.name and not is_dialog %}
                 <span class="chat-header-id">{{ room_id }}</span>
             {% endif %}
             <span class="chat-header-spacer"></span>
             {% if config.personal_login %}
                 <span class="chat-header-pop" data-short="FAV">Личное</span>
             {% else %}
-                <span class="chat-header-pop" data-short="{{ 'OPN' if config.is_open else 'LCK' }}">{{ 'Открытая' if config.is_open else 'Закрытая' }}</span>
-                {% if session.get('user_type') == 'registered' %}
-                    {% if config.creator_login == session.get('login') %}
-                        <a href="{{ url_for('rooms.manage_room', room_id=room_id) }}" class="btn btn-sm">Управление</a>
-                    {% else %}
-                        <form action="{{ url_for('rooms.leave_room', room_id=room_id) }}" method="post" style="display:inline;">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button class="btn btn-sm" type="submit"
-                                    style="border-color:var(--warn);color:var(--warn);box-shadow:3px 3px 0 0 var(--warn);">
-                                Покинуть
-                            </button>
-                        </form>
-                    {% endif %}
+                <span class="chat-header-pop" data-short="{{ 'DLG' if is_dialog else ('OPN' if config.is_open else 'LCK') }}">{{ 'Диалог' if is_dialog else ('Открытая' if config.is_open else 'Закрытая') }}</span>
+                {% if view %}
+                    <a href="{{ url_for('rooms.room_settings', room_id=room_id) }}" class="btn btn-sm">Настройки</a>
                 {% endif %}
             {% endif %}
         </div>
 
+        {% if view and not is_dialog and view.dialog_proposed_by %}
+        <div class="dialog-banner">
+            {% if view.dialog_proposed_by == session.get('login') %}
+                <span>{{ 'Ждём, пока ' ~ view.peer ~ ' примет приглашение в диалог.' if view.pending_invite else 'Вы предложили ' ~ view.peer ~ ' сделать комнату диалогом.' }}</span>
+                {% set acts = [('decline', 'Отозвать', '')] %}
+            {% else %}
+                <span><strong>{{ view.dialog_proposed_by }}</strong> {{ 'приглашает вас в диалог' if view.role == 'invited' else 'предлагает сделать комнату диалогом' }}.</span>
+                {% set acts = [('accept', 'Принять', 'btn-primary'), ('decline', 'Отклонить', '')] %}
+            {% endif %}
+            {% for action, label, cls in acts %}
+            <form action="{{ url_for('rooms.room_settings', room_id=room_id) }}" method="post" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="{{ action }}">
+                <input type="hidden" name="back" value="room">
+                <button class="btn btn-sm {{ cls }}" type="submit">{{ label }}</button>
+            </form>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="chat-scroll">
+        <canvas class="blueprint" id="blueprint" aria-hidden="true"></canvas>
         <div class="chat-messages" id="messages">
             {% if messages %}
                 {% for msg in messages %}
@@ -47,10 +72,11 @@
                 {% set is_me = (msg.author == current_user) %}
                 {% set is_anon = msg.author and msg.author.startswith('Anon') %}
                 {% set is_founder = (msg.author == config.creator_login) %}
-                <div class="msg" id="msg-{{ loop.index }}">
+                <div class="msg {{ 'mine' if is_me else 'theirs' }}" id="msg-{{ loop.index }}" data-id="{{ msg.id }}">
                     <div class="msg-header">
                         <span class="msg-author{{ ' is-me' if is_me else '' }}{{ ' is-anon' if is_anon else '' }}{{ ' is-founder' if is_founder else '' }}">{{ msg.author }}</span>
                         <span class="msg-time">{{ msg.timestamp | ts }}</span>
+                        {% if is_me %}<span class="msg-ticks">✓</span>{% endif %}
                     </div>
                     {% if msg.reply_to %}
                         {% set ri = msg.reply_to %}
@@ -98,6 +124,8 @@
             {% endif %}
         </div>
 
+        </div>
+
         <div class="chat-form-wrap">
         <form id="msg-form" action="{{ url_for('rooms.post_message', room_id=room_id) }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -122,9 +150,11 @@
             </div>
             <div class="chat-input">
                 <button type="button" class="attach-btn" id="attach-btn" title="Прикрепить файл">📎</button>
+                {% set locked = view and view.pending_invite %}
                 <textarea class="chat-input-text" name="text" rows="1"
-                          placeholder="Сообщение или файл…"
-                          data-placeholder-mobile="Сообщение…"
+                          placeholder="{{ 'Писать можно после принятия приглашения' if locked else 'Сообщение или файл…' }}"
+                          data-placeholder-mobile="{{ 'Ждём принятия…' if locked else 'Сообщение…' }}"
+                          {% if locked %}disabled{% endif %}
                           autocomplete="off"></textarea>
                 <button class="btn btn-primary" type="submit">Отправить ↵</button>
             </div>
@@ -294,10 +324,11 @@
             ? '<button type="button" class="edit-btn" data-index="' + m.index + '">Изм.</button>' +
               '<button type="button" class="del-btn" data-index="' + m.index + '">Удалить</button>'
             : '';
-        return '<div class="msg" id="msg-' + m.index + '">' +
+        return '<div class="msg ' + (isMe ? 'mine' : 'theirs') + '" id="msg-' + m.index + '" data-id="' + (m.id || '') + '">' +
             '<div class="msg-header">' +
                 '<span class="' + authorClass + '">' + esc(m.author) + '</span>' +
                 '<span class="msg-time">' + formatTs(m.timestamp) + '</span>' +
+                (isMe ? '<span class="msg-ticks">✓</span>' : '') +
             '</div>' +
             replyHtml +
             '<div class="msg-text" data-raw="' + esc(m.text) + '">' + renderText(m.text) + '</div>' +
@@ -433,7 +464,41 @@
         bindEdit(messagesEl);
         bindDelete(messagesEl);
         if (wasAtBottom) scrollBottom();
+        updateTicks();
+        sendRead();
     }
+
+    // ── Диалог: галочки «прочитано», отметка прочтения ──────────────────────
+    const IS_DIALOG = {{ (view.is_dialog if view else false) | tojson }};
+    const PEER = {{ (view.peer if view else none) | tojson }};
+    let peerRead = {{ (view.peer_read if view else none) | tojson }} || 0;
+    function updateTicks() {
+        if (!IS_DIALOG) return;
+        messagesEl.querySelectorAll('.msg.mine').forEach(el => {
+            const t = el.querySelector('.msg-ticks');
+            if (!t) return;
+            const read = Number(el.dataset.id) > 0 && Number(el.dataset.id) <= peerRead;
+            t.textContent = read ? '✓✓' : '✓';
+            t.classList.toggle('read', read);
+        });
+    }
+    let lastSentRead = 0;
+    function sendRead() {
+        if (!IS_DIALOG || document.visibilityState !== 'visible') return;
+        const theirs = messagesEl.querySelectorAll('.msg.theirs');
+        if (!theirs.length) return;
+        const id = Number(theirs[theirs.length - 1].dataset.id);
+        if (!id || id <= lastSentRead) return;
+        lastSentRead = id;
+        fetch('/room/' + ROOM_ID + '/read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+            body: JSON.stringify({ message_id: id }),
+        }).catch(() => {});
+    }
+    document.addEventListener('visibilitychange', sendRead);
+    updateTicks();
+    sendRead();
 
     function poll() {
         fetch('{{ url_for("rooms.poll_messages", room_id=room_id) }}?after=' + msgCount)
@@ -486,6 +551,40 @@
         socket.on('delete_message', data => {
             const msgEl = document.getElementById('msg-' + data.index);
             if (msgEl) msgEl.remove();
+        });
+
+        // ── Диалог: «прочитано», «печатает…», «в сети», смена настроек ──────
+        const statusEl = document.getElementById('peer-status');
+        let peerOnline = {{ (view.peer_online if view else none) | tojson }};
+        let typingTimer = null;
+        function renderStatus(typing) {
+            if (!statusEl) return;
+            statusEl.textContent = typing ? 'печатает…' : (peerOnline ? 'в сети' : '');
+            statusEl.classList.toggle('typing', !!typing);
+        }
+        socket.on('read', d => {
+            if (d.login !== PEER) return;
+            peerRead = Math.max(peerRead, d.message_id);
+            updateTicks();
+        });
+        socket.on('typing', d => {
+            if (d.login !== PEER) return;
+            renderStatus(true);
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => renderStatus(false), 5000);
+        });
+        socket.on('presence', d => {
+            if (d.login !== PEER) return;
+            peerOnline = d.online;
+            renderStatus(false);
+        });
+        socket.on('room_updated', () => location.reload());
+        socket.on('room_removed', () => { location.href = '/'; });
+        let lastTyping = 0;
+        const typingInput = document.querySelector('.chat-input-text');
+        if (IS_DIALOG && typingInput) typingInput.addEventListener('input', () => {
+            const now = Date.now();
+            if (now - lastTyping > 3000) { lastTyping = now; socket.emit('typing', { room_id: ROOM_ID }); }
         });
 
     } catch(e) {
@@ -606,6 +705,60 @@
     bindReply(messagesEl);
     bindEdit(messagesEl);
     bindDelete(messagesEl);
+
+// ── «Чертёж»: ГОСТ-миллиметровка и медленная развёртка (как в приложениях) ──
+(function blueprint() {
+    const cv = document.getElementById('blueprint');
+    if (!cv || !cv.getContext) return;
+    const wide = window.matchMedia('(min-width: 900px)');
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const ctx = cv.getContext('2d');
+    const t0 = performance.now();
+    let raf = 0;
+    function accent() {
+        return getComputedStyle(document.documentElement).getPropertyValue('--mys-blue').trim() || '#0040ff';
+    }
+    function rgba(hex, a) {
+        const n = parseInt(hex.replace('#', ''), 16);
+        return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')';
+    }
+    function frame(now) {
+        raf = 0;
+        if (!wide.matches) { cv.style.display = 'none'; return; }
+        cv.style.display = '';
+        const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+        if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+            cv.width = Math.round(w * dpr);
+            cv.height = Math.round(h * dpr);
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+        const c = accent(), step = 12;
+        [false, true].forEach(major => {
+            ctx.strokeStyle = rgba(c, major ? 0.08 : 0.04);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0, x = 0; x <= w; i++, x += step) if ((i % 5 === 0) === major) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); }
+            for (let i = 0, y = 0; y <= h; i++, y += step) if ((i % 5 === 0) === major) { ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); }
+            ctx.stroke();
+        });
+        if (still.matches) return; // «уменьшить движение» — только сетка
+        const band = h * 0.12, at = ((now - t0) % 20000) / 20000 * (h + 2 * band) - band;
+        const g = ctx.createLinearGradient(0, at - band, 0, at + band);
+        g.addColorStop(0, rgba(c, 0));
+        g.addColorStop(0.5, rgba(c, 0.07));
+        g.addColorStop(1, rgba(c, 0));
+        ctx.fillStyle = g;
+        ctx.fillRect(0, at - band, w, 2 * band);
+        raf = requestAnimationFrame(frame); // на скрытой вкладке браузер сам ставит на паузу
+    }
+    function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+    kick();
+    wide.addEventListener('change', kick);
+    still.addEventListener('change', kick);
+    window.addEventListener('resize', kick);
+    document.addEventListener('mys-theme', kick);
+})();
 </script>
 {% endblock %}
 

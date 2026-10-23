@@ -240,17 +240,39 @@ def render_text_filter(text):
 
 
 def get_room_info(room_id):
-    """Return dict with id, name, is_open for sidebar display."""
+    """Комната для боковой панели: название/аватарка глазами текущего пользователя."""
     from models import Room
+    import dialogs
     room = Room.query.filter_by(room_id=room_id).first()
-    if room:
-        return {'id': room_id, 'name': room.name or '', 'is_open': room.is_open}
-    return {'id': room_id, 'name': '', 'is_open': True}
+    if not room:
+        return {'id': room_id, 'name': '', 'is_open': True, 'title': '', 'avatar_rev': 0, 'is_dialog': False}
+    login = session.get('login') if session.get('user_type') == 'registered' else None
+    if login and dialogs.member(room, login):
+        v = dialogs.room_view(room, login)
+        return {'id': room_id, 'name': room.name or '', 'is_open': room.is_open,
+                'title': v['title'] or '', 'avatar_rev': v['avatar_rev'], 'is_dialog': v['is_dialog'],
+                'invited': v['role'] == 'invited'}
+    return {'id': room_id, 'name': room.name or '', 'is_open': room.is_open,
+            'title': room.name or '', 'avatar_rev': room.avatar_rev if room.avatar else 0, 'is_dialog': False}
+
+
+def get_invites():
+    """Приглашения в диалог для текущего пользователя: [(код, от кого)]."""
+    from models import Room, RoomMember
+    if session.get('user_type') != 'registered':
+        return []
+    out = []
+    for m in RoomMember.query.filter_by(login=session.get('login'), role='invited').all():
+        room = Room.query.filter_by(room_id=m.room_id).first()
+        if room is not None:
+            out.append((room.room_id, room.dialog_proposed_by or room.creator_login))
+    return out
 
 
 @app.context_processor
 def inject_room_helpers():
-    return {'room_display_name': get_room_display_name, 'get_room_info': get_room_info}
+    return {'room_display_name': get_room_display_name, 'get_room_info': get_room_info,
+            'get_invites': get_invites}
 
 
 def _sign_anon(fp: str) -> str:

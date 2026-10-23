@@ -12,8 +12,9 @@ from werkzeug.utils import secure_filename
 
 from extensions import db, socketio
 from media_cleanup import ROOMS_DIR, cleanup as _cleanup_media
-from models import Room, Message, RoomMember
-from ws_centralized import fanout_message, fanout_event
+from models import Room, Message, RoomMember, User
+from ws_centralized import fanout_message, fanout_event, unsubscribe_user
+import dialogs
 
 rooms_bp = Blueprint('rooms', __name__)
 
@@ -96,6 +97,9 @@ def _track_room(room_id):
         if login and not RoomMember.query.filter_by(room_id=room_id, login=login).first():
             member = RoomMember(room_id=room_id, login=login, role='visitor')
             db.session.add(member)
+            room = Room.query.filter_by(room_id=room_id).first()
+            if room is not None:
+                dialogs.membership_changed(room)  # третий участник — предложение сгорает
             db.session.commit()
 
 
@@ -109,7 +113,12 @@ def _untrack_room(room_id):
 
 def _remove_member(room_id, login):
     RoomMember.query.filter_by(room_id=room_id, login=login).delete()
+    room = Room.query.filter_by(room_id=room_id).first()
+    if room is not None:
+        dialogs.membership_changed(room)
     db.session.commit()
+    if room is not None:
+        unsubscribe_user(login, room.id)
 
 
 @rooms_bp.route('/room/join', methods=['POST'])
@@ -157,7 +166,13 @@ def room(room_id):
     _track_room(room_id)
 
     messages = Message.query.filter_by(room_id=room_id).order_by(Message.id).all()
-    return render_template('room.html', room_id=room_id, config=room, messages=messages)
+    login = _registered_login()
+    view = dialogs.room_view(room, login) if login and dialogs.member(room, login) else None
+    return render_template('room.html', room_id=room_id, config=room, messages=messages, view=view)
+
+
+def _registered_login():
+    return session.get('login') if session.get('user_type') == 'registered' else None
 
 
 @rooms_bp.route('/room/<room_id>/message/<int:msg_index>/edit', methods=['POST'])
@@ -247,6 +262,7 @@ def poll_messages(room_id):
     new_msgs = []
     for i, msg in enumerate(new_messages):
         entry = {
+            'id': msg.id,
             'index': after + i + 1,
             'author': msg.author,
             'timestamp': msg.timestamp.isoformat(),
@@ -295,6 +311,7 @@ def _create_message(room, author, text, media, reply_to):
     db.session.commit()
 
     entry = {
+        'id': msg.id,
         'index': Message.query.filter_by(room_id=room.room_id).order_by(Message.id).count(),
         'author': msg.author,
         'timestamp': msg.timestamp.isoformat(),
@@ -332,6 +349,10 @@ def post_message(room_id):
 
     if not _can_access_room(room_id):
         return redirect(url_for('index'))
+    if dialogs.pending_invite(room):  # приглашение в диалог ещё не принято — писать нельзя
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'ok': False, 'error': 'pending_invite'}), 403
+        return redirect(url_for('rooms.room', room_id=room_id))
 
     text = re.sub(r'\n{6,}', '\n\n\n\n\n', request.form.get('text', '').strip())
     media = request.form.get('media', '').strip()
@@ -481,58 +502,138 @@ def delete_room(room_id):
 @rooms_bp.route('/room/<room_id>/manage/kick', methods=['POST'])
 def kick_user(room_id):
     room = Room.query.filter_by(room_id=room_id).first()
-    if not room:
-        return redirect(url_for('index'))
-
-    if session.get('user_type') != 'registered':
-        return redirect(url_for('rooms.room', room_id=room_id))
-
-    if room.creator_login != session.get('login'):
-        return redirect(url_for('rooms.room', room_id=room_id))
-
-    target = request.form.get('login', '').strip()
-    if target and target != room.creator_login:
-        _remove_member(room_id, target)
-
-    return redirect(url_for('rooms.manage_room', room_id=room_id))
+    login = _registered_login()
+    if room and login:
+        try:
+            dialogs.remove_member(room, login, request.form.get('login', '').strip())
+        except dialogs.DialogError:
+            pass
+    return redirect(url_for('rooms.room_settings', room_id=room_id))
 
 
 @rooms_bp.route('/room/<room_id>/manage', methods=['GET', 'POST'])
 def manage_room(room_id):
+    # Управление стало общими настройками комнаты (для всех участников)
+    return redirect(url_for('rooms.room_settings', room_id=room_id))
+
+
+# ── Настройки комнаты, диалоги, аватарки (правила — в dialogs.py) ─────────────
+
+@rooms_bp.route('/room/<room_id>/settings', methods=['GET', 'POST'])
+def room_settings(room_id):
     room = Room.query.filter_by(room_id=room_id).first()
     if not room:
         return redirect(url_for('index'))
-
-    if session.get('user_type') != 'registered':
+    login = _registered_login()
+    if login is None or dialogs.member(room, login) is None:
         return redirect(url_for('rooms.room', room_id=room_id))
+    error = None
+    if request.method == 'POST':
+        act, f = request.form.get('action', ''), request.form
+        try:
+            if act == 'general':
+                dialogs.update_settings(room, login, f.get('room_name', ''),
+                                        None if room.is_dialog else f.get('is_open') == 'true',
+                                        None if room.is_dialog else f.get('tg_visible') == 'on')
+            elif act == 'add':
+                dialogs.add_member(room, login, f.get('login', ''))
+            elif act == 'kick':
+                dialogs.remove_member(room, login, f.get('login', ''))
+            elif act in ('propose', 'accept', 'decline', 'disable'):
+                if not dialogs.dialog_action(room, login, act):
+                    _untrack_room(room_id)
+                    return redirect(url_for('index'))
+            elif act == 'title':
+                dialogs.set_title(room, login, f.get('title', ''))
+            elif act == 'avatar':
+                up = request.files.get('avatar')
+                if up is not None and up.filename:
+                    dialogs.set_avatar(room, login, up.read(dialogs.AVATAR_MAX + 1))
+            elif act == 'avatar_delete':
+                dialogs.delete_avatar(room, login)
+            elif act == 'privacy':
+                dialogs.set_privacy(login, f.get('share_read') == 'on', f.get('share_online') == 'on')
+            elif act == 'leave':
+                dialogs.leave(room, login)
+                _untrack_room(room_id)
+                return redirect(url_for('index'))
+            back = request.form.get('back')
+            if back == 'room':
+                return redirect(url_for('rooms.room', room_id=room_id))
+            return redirect(url_for('rooms.room_settings', room_id=room_id))
+        except dialogs.DialogError as e:
+            error = dialogs.ERROR_TEXT.get(e.code, e.code)
+    return render_template(
+        'settings.html', room_id=room_id, room=room, view=dialogs.room_view(room, login),
+        members=dialogs.members(room), is_creator=room.creator_login == login,
+        me=User.query.filter_by(login=login).first(), error=error,
+        eligible=dialogs.eligible(room),
+    )
 
-    if room.creator_login != session.get('login'):
-        return redirect(url_for('rooms.room', room_id=room_id))
 
-    if request.method == 'GET':
-        members = RoomMember.query.filter_by(room_id=room_id).all()
-        return render_template('manage.html', room_id=room_id, config=room, users=members)
+@rooms_bp.route('/room/<room_id>/avatar')
+def room_avatar(room_id):
+    room = Room.query.filter_by(room_id=room_id).first()
+    if not room or not _can_access_room(room_id):
+        return '', 404
+    found = dialogs.avatar_file(room, _registered_login())
+    if found is None or not os.path.isfile(found[0]):
+        return '', 404
+    resp = send_from_directory(os.path.dirname(found[0]), os.path.basename(found[0]), mimetype='image/png')
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    resp.headers['Cache-Control'] = 'private, max-age=86400'  # адрес содержит ?rev=
+    return resp
 
-    room.is_open = request.form.get('is_open', 'true') == 'true'
-    room.name = request.form.get('room_name', '').strip()[:64]
-    # tg_visible только для открытых комнат; при переключении в закрытую — сбрасываем
-    if room.is_open:
-        room.tg_visible = request.form.get('tg_visible') == 'on'
-    else:
-        room.tg_visible = False
 
-    add_user = request.form.get('add_user', '').strip()
-    if add_user and not RoomMember.query.filter_by(room_id=room_id, login=add_user).first():
-        from models import User as UserModel
-        if UserModel.query.filter_by(login=add_user).first():
-            member = RoomMember(room_id=room_id, login=add_user, role='member')
-            db.session.add(member)
+@rooms_bp.route('/room/<room_id>/read', methods=['POST'])
+def mark_read(room_id):
+    room = Room.query.filter_by(room_id=room_id).first()
+    login = _registered_login()
+    if not room or login is None:
+        return jsonify({'ok': False}), 404
+    try:
+        dialogs.mark_read(room, login, (request.get_json(silent=True) or {}).get('message_id'))
+    except dialogs.DialogError as e:
+        return jsonify({'ok': False, 'error': e.code}), e.status
+    return jsonify({'ok': True})
 
-    db.session.commit()
-    return redirect(url_for('rooms.manage_room', room_id=room_id))
+
+@rooms_bp.route('/dialogs/new', methods=['POST'])
+def new_dialog():
+    login = _registered_login()
+    if login is None:
+        return redirect(url_for('index'))
+    try:
+        room, _ = dialogs.invite(login, request.form.get('login', ''))
+    except dialogs.DialogError as e:
+        return render_template('index.html', error=dialogs.ERROR_TEXT.get(e.code, e.code))
+    _track_room(room.room_id)
+    return redirect(url_for('rooms.room', room_id=room.room_id))
 
 
 # ── Socket.IO events ──────────────────────────────────────────────────────────
+
+@socketio.on('connect')
+def on_connect(*_):
+    login = _registered_login()
+    if login:
+        dialogs.connected(login)  # «в сети» для собеседников по диалогам
+
+
+@socketio.on('disconnect')
+def on_disconnect(*_):
+    login = _registered_login()
+    if login:
+        dialogs.disconnected(login)
+
+
+@socketio.on('typing')
+def on_typing(data):
+    login = _registered_login()
+    room = Room.query.filter_by(room_id=str((data or {}).get('room_id', ''))).first()
+    if login and room is not None:
+        dialogs.typing(room, login)
+
 
 @socketio.on('join')
 def on_join(data):
