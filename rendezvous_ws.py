@@ -140,3 +140,63 @@ def p2p(ws):
                     other.send(encode_frame(PEER_LEFT, b""))
                 except Exception:
                     pass
+
+
+# ── /mesh: прокси к публичному mesh-узлу (mesh_daemon.py) ─────────────────────
+# Одно бинарное WS-сообщение = один кадр линка; к демону — тот же кадр с префиксом
+# u32be длины (TcpWire). Содержимое не разбираем: шифрование линка — от клиента
+# до демона.
+import os as _os
+import socket as _socket
+
+MESH_PORT = int(_os.environ.get("MESH_PORT", "7811"))
+MESH_MAX_FRAME = 72 * 1024
+
+
+def _recv_exact(sock, n: int) -> bytes:
+    buf = bytearray()
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise ConnectionError("mesh-узел закрыл соединение")
+        buf += chunk
+    return bytes(buf)
+
+
+@p2p_sock.route("/mesh", bp=p2p_bp)
+def mesh(ws):
+    try:
+        sock = _socket.create_connection(("127.0.0.1", MESH_PORT), timeout=5)
+    except OSError:
+        return  # демон не запущен — клиент повторит позже
+    sock.settimeout(None)
+
+    def down():  # демон → клиент
+        try:
+            while True:
+                n = int.from_bytes(_recv_exact(sock, 4), "big")
+                if n > MESH_MAX_FRAME:
+                    break
+                ws.send(_recv_exact(sock, n))
+        except Exception:
+            pass
+        finally:
+            try:
+                ws.close()
+            except Exception:
+                pass
+
+    threading.Thread(target=down, daemon=True).start()
+    try:
+        while True:  # клиент → демон
+            data = ws.receive()
+            if not isinstance(data, (bytes, bytearray)) or len(data) > MESH_MAX_FRAME:
+                break
+            sock.sendall(len(data).to_bytes(4, "big") + bytes(data))
+    except Exception:
+        pass
+    finally:
+        try:
+            sock.close()
+        except OSError:
+            pass

@@ -8,6 +8,9 @@
 #   ./deploy.sh --stun                   только STUN (coturn stun-only, 3478/udp) —
 #                                        прямой канал P2P (WebRTC) телефона и десктопа
 #
+# Mesh-узел (vsc-mesh, 127.0.0.1:7811, снаружи — через /mesh) ставится всегда;
+# свой публичный адрес для PEERS: --domain x.ru или MESH_PUBLIC_URL=wss://x.ru/mesh.
+#
 # ponytail: один файл, никакого ansible. Если деплоев станет больше одного
 # сервера — вот тогда и заводить нормальный инструмент.
 set -euo pipefail
@@ -192,6 +195,36 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now "${SERVICE}-cleanup.timer" >/dev/null
 
+# ── 4в. Mesh-узел ──────────────────────────────────────────────────────────
+# Ретранслятор mesh-сети: P2P-каналы идут через него, когда relay через сервер
+# недоступен. Отдельный процесс (asyncio), снаружи — через веб-маршрут /mesh.
+say "Ставлю mesh-узел (${SERVICE}-mesh)"
+if ! ldconfig -p 2>/dev/null | grep -q libsodium; then
+    sudo apt-get update && sudo apt-get install -y libsodium23
+fi
+MESH_PUBLIC_URL="${MESH_PUBLIC_URL:-}"
+if [ -z "$MESH_PUBLIC_URL" ] && [ -n "$DOMAIN" ]; then MESH_PUBLIC_URL="wss://$DOMAIN/mesh"; fi
+sudo tee /etc/systemd/system/${SERVICE}-mesh.service >/dev/null <<EOF
+[Unit]
+Description=Mesh-узел МЫС (ретрансляция P2P-каналов)
+After=network.target
+
+[Service]
+User=$(id -un)
+WorkingDirectory=$APP_DIR
+Environment="MESH_PORT=7811"
+Environment="MESH_PUBLIC_URL=$MESH_PUBLIC_URL"
+ExecStart=$VENV/bin/python $APP_DIR/mesh_daemon.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable "${SERVICE}-mesh" >/dev/null
+sudo systemctl restart "${SERVICE}-mesh"
+
 # ── 5. Рестарт ────────────────────────────────────────────────────────────
 say "Перезапускаю $SERVICE"
 # Именно restart: reload оставит крутиться старый код.
@@ -215,6 +248,17 @@ case "$ws" in
     *101*) echo "WebSocket-апгрейд на /ws → 101 ok" ;;
     *)     warn "WebSocket-апгрейд не прошёл ($ws) — без него чат откатится на polling" ;;
 esac
+
+meshws="$(curl -s -i --max-time 5 \
+        -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+        -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGVzdHRlc3R0ZXN0dGVzdA==' \
+        "$APP_URL/mesh" | head -1 || true)"
+case "$meshws" in
+    *101*) echo "Mesh-узел: апгрейд /mesh → 101 ok" ;;
+    *)     warn "/mesh не апгрейдится ($meshws) — mesh-сеть без публичного узла" ;;
+esac
+if sudo systemctl is-active --quiet "${SERVICE}-mesh"; then echo "${SERVICE}-mesh активен"
+else warn "${SERVICE}-mesh не запущен: sudo journalctl -u ${SERVICE}-mesh -n 30"; fi
 
 if [ -n "$DOMAIN" ]; then
     scheme="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "https://$DOMAIN/" || echo 000)"
