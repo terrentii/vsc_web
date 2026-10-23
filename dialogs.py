@@ -132,7 +132,9 @@ def room_view(room, login) -> dict:
         title = (me.title if me and me.title else None) or (peer.login if peer else None)
         avatar_rev = me.avatar_rev if me and me.avatar else 0
     else:
-        title = room.name or None
+        # приглашение без названия — показываем того, кто на другом конце
+        invite_peer = peer.login if peer and room.dialog_proposed_by and pending_invite(room) else None
+        title = room.name or invite_peer
         avatar_rev = room.avatar_rev if room.avatar else 0
     live = bool(room.is_dialog and peer_user)
     return {

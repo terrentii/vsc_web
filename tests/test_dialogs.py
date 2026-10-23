@@ -126,6 +126,7 @@ def test_invite_flow_blocks_posting_until_accept(client):
     assert r.get_json()['role'] == 'godfather' and r.get_json()['dialog_proposed_by'] == 'alice'
     mine = client.get('/api/rooms', headers=b).get_json()['rooms']
     assert [x['role'] for x in mine if x['id'] == rid] == ['invited']
+    assert [x['title'] for x in mine if x['id'] == rid] == ['alice']  # без названия — собеседник
     assert _post(client, a, rid).get_json()['error'] == 'pending_invite'
     assert _act(client, b, rid, 'accept').get_json()['is_dialog']
     assert _post(client, b, rid).status_code == 200
