@@ -103,6 +103,9 @@ from dialogs import dialogs_bp  # noqa: E402 — после blueprint'ов, от
 app.register_blueprint(dialogs_bp, url_prefix='/api')
 csrf.exempt(dialogs_bp)   # Bearer: настройки комнат, диалоги, аватарки
 app.register_blueprint(ws_bp)
+# Ping от сервера: мёртвого клиента (телефон потерял сеть) видно за 2 интервала —
+# иначе «в сети» у собеседника висит до таймаута TCP.
+app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': float(os.environ.get('WS_PING_INTERVAL', '25'))}
 sock.init_app(app)
 csrf.exempt(ws_bp)        # WS-эндпоинт не использует CSRF
 app.register_blueprint(p2p_bp)
