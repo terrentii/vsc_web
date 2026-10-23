@@ -61,7 +61,8 @@ def test_create_and_list_rooms(client):
     r = client.post('/api/rooms', json={'name': 'проект'}, headers=h)
     assert r.status_code == 201
     created = r.get_json()
-    assert set(created) == {'id', 'name', 'is_direct', 'updated_at', 'code'}
+    # базовые поля прежние; сверху — диалог/аватар/собеседник (dialogs.room_view)
+    assert {'id', 'name', 'is_direct', 'updated_at', 'code', 'is_dialog', 'title', 'avatar_rev'} <= set(created)
     assert created['is_direct'] is False
     assert created['name'] == 'проект'
     assert isinstance(created['id'], int)

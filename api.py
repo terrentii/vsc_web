@@ -191,6 +191,9 @@ def post_message(room_id):
     caller = _get_caller()
     if not caller or not _can_access(room, caller):
         return jsonify({'error': 'Access denied'}), 403
+    import dialogs
+    if dialogs.pending_invite(room):
+        return jsonify({'error': 'pending_invite'}), 403
 
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()[:4000]
