@@ -140,6 +140,7 @@
             </div>
             <div class="upload-preview" id="upload-preview" style="display:none;">
                 <span class="upload-preview-label">📎 Прикреплено</span>
+                <img class="upload-preview-thumb" id="upload-preview-thumb" alt="" style="display:none;">
                 <span class="upload-preview-name" id="upload-preview-name"></span>
                 <button type="button" class="upload-preview-cancel" id="upload-cancel">×</button>
             </div>
@@ -606,8 +607,24 @@
     let activeXhr = null;
 
     fileInput.addEventListener('change', function() {
-        const file = fileInput.files[0];
-        if (!file) return;
+        if (fileInput.files[0]) uploadFile(fileInput.files[0]);
+    });
+
+    const uploadThumb = document.getElementById('upload-preview-thumb');
+
+    // Загрузка вложения: кнопка 📎, перетаскивание в окно, Ctrl+V (как в Telegram).
+    // В вебе у сообщения одно вложение — из нескольких берём первое.
+    function uploadFile(file) {
+        if (!file || textInput.disabled) return;
+        if (activeXhr) clearUpload();
+        if (uploadThumb.src) URL.revokeObjectURL(uploadThumb.src);
+        if (file.type.startsWith('image/')) {
+            uploadThumb.src = URL.createObjectURL(file);
+            uploadThumb.style.display = '';
+        } else {
+            uploadThumb.removeAttribute('src');
+            uploadThumb.style.display = 'none';
+        }
         uploadPreviewName.textContent = file.name;
         uploadPreview.style.display = 'flex';
         uploadProgress.style.display = 'block';
@@ -651,6 +668,46 @@
         xhr.addEventListener('error', function() { onDone(); clearUpload(); alert('Ошибка загрузки'); });
         xhr.addEventListener('abort', function() { onDone(); });
         xhr.send(fd);
+        textInput.focus();
+    }
+
+    // Файл из буфера без имени (скриншот) — дать понятное имя с датой
+    function named(file) {
+        if (file.name && file.name !== 'image.png') return file;
+        const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+        const d = new Date(), z = n => String(n).padStart(2, '0');
+        const stamp = d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + '_' +
+            z(d.getHours()) + '-' + z(d.getMinutes()) + '-' + z(d.getSeconds());
+        return new File([file], 'изображение_' + stamp + '.' + ext, { type: file.type });
+    }
+
+    textInput.addEventListener('paste', function(e) {
+        const files = Array.from((e.clipboardData || {}).files || []);
+        if (!files.length) return; // обычный текст — как обычно
+        e.preventDefault();
+        uploadFile(named(files[0]));
+    });
+
+    // Перетаскивание файла в любое место чата — с подсветкой зоны
+    const chatPanel = document.querySelector('.chat-panel');
+    let dragDepth = 0;
+    const hasFiles = e => Array.from((e.dataTransfer || {}).types || []).includes('Files');
+    chatPanel.addEventListener('dragenter', e => {
+        if (!hasFiles(e) || textInput.disabled) return;
+        e.preventDefault();
+        if (dragDepth++ === 0) chatPanel.classList.add('drop-target');
+    });
+    chatPanel.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+    chatPanel.addEventListener('dragleave', e => {
+        if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; chatPanel.classList.remove('drop-target'); }
+    });
+    chatPanel.addEventListener('drop', e => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        dragDepth = 0;
+        chatPanel.classList.remove('drop-target');
+        const file = e.dataTransfer.files[0];
+        if (file) uploadFile(named(file));
     });
 
     function clearUpload() {
@@ -659,16 +716,51 @@
         uploadPreview.style.display = 'none'; uploadProgress.style.display = 'none';
         uploadProgressFill.classList.remove('indeterminate');
         attachBtn.classList.remove('has-file');
+        if (uploadThumb.src) URL.revokeObjectURL(uploadThumb.src);
+        uploadThumb.removeAttribute('src');
+        uploadThumb.style.display = 'none';
     }
 
     document.getElementById('upload-cancel').addEventListener('click', clearUpload);
 
+    function cancelReply() {
+        document.getElementById('reply_to').value = '';
+        document.getElementById('reply-preview').style.display = 'none';
+    }
+
     textInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
             e.preventDefault();
             msgForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        } else if (e.key === 'Escape') {
+            // как в Telegram: снять ответ → убрать вложение → в пустом поле закрыть чат
+            e.preventDefault();
+            if (document.getElementById('reply_to').value) cancelReply();
+            else if (mediaFilename.value || activeXhr) clearUpload();
+            else if (!textInput.value.trim()) window.location.href = '/';
+        } else if (e.key === 'ArrowUp' && !textInput.value && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+            // ↑ в пустом поле — изменить своё последнее сообщение
+            const edits = messagesEl.querySelectorAll('.edit-btn');
+            if (edits.length) { e.preventDefault(); edits[edits.length - 1].click(); }
         }
     });
+
+    // Черновик комнаты: живёт в этом браузере, пока не отправлен
+    const DRAFT_KEY = 'mys-draft:' + ROOM_ID;
+    try {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (saved && !textInput.disabled) {
+            textInput.value = saved;
+            textInput.style.height = Math.min(textInput.scrollHeight, 160) + 'px';
+        }
+    } catch (e) { /* хранилище недоступно — без черновиков */ }
+    function saveDraft() {
+        try {
+            const v = textInput.value;
+            if (v.trim()) localStorage.setItem(DRAFT_KEY, v); else localStorage.removeItem(DRAFT_KEY);
+        } catch (e) { /* без черновиков */ }
+    }
+    textInput.addEventListener('input', saveDraft);
 
     textInput.addEventListener('input', function() {
         this.style.height = 'auto';
@@ -690,6 +782,7 @@
             body: formData
         }).then(() => {
             textInput.value = '';
+            saveDraft();
             textInput.style.height = 'auto';
             document.getElementById('reply_to').value = '';
             document.getElementById('reply-preview').style.display = 'none';
@@ -697,10 +790,7 @@
         }).catch(() => { msgForm.submit(); });
     });
 
-    document.getElementById('reply-cancel').addEventListener('click', () => {
-        document.getElementById('reply_to').value = '';
-        document.getElementById('reply-preview').style.display = 'none';
-    });
+    document.getElementById('reply-cancel').addEventListener('click', cancelReply);
 
     bindReply(messagesEl);
     bindEdit(messagesEl);

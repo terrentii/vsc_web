@@ -610,6 +610,22 @@
       color: var(--mys-blue); font-weight: 700; letter-spacing: .16em; margin-right: 10px;
     }
     .upload-preview { gap: 10px; justify-content: flex-start; }
+    .upload-preview-thumb {
+      height: 44px; max-width: 80px; object-fit: cover;
+      border: 1.5px solid var(--mys-ink); flex-shrink: 0;
+    }
+    /* перетаскивание файла в чат: пунктирная рамка поверх панели */
+    .chat-panel { position: relative; }
+    .chat-panel.drop-target::after {
+      content: 'Отпустите, чтобы прикрепить';
+      position: absolute; inset: 10px; z-index: 50; pointer-events: none;
+      display: flex; align-items: center; justify-content: center;
+      border: 3px dashed var(--mys-blue);
+      background: color-mix(in srgb, var(--mys-blue) 10%, transparent);
+      font-family: var(--font-mono); font-size: 18px; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--mys-blue);
+    }
+    .room-item .room-id.has-draft { color: var(--warn); }
     .upload-preview-name {
       flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       text-transform: none; letter-spacing: 0; color: var(--muted);
