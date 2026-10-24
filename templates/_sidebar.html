@@ -88,3 +88,24 @@
     </div>
     {% endif %}
 </aside>
+<script>
+// Черновики в списке комнат и переход между чатами Alt+↑/↓ (как в Telegram)
+(function () {
+    const items = Array.from(document.querySelectorAll('#sidebar .room-item'));
+    items.forEach(a => {
+        const m = (a.getAttribute('href') || '').match(/\/room\/([^/?#]+)/);
+        let draft = null;
+        try { draft = m && localStorage.getItem('mys-draft:' + decodeURIComponent(m[1])); } catch (e) { /* без черновиков */ }
+        const sub = a.querySelector('.room-id');
+        if (draft && sub) { sub.textContent = 'черновик'; sub.classList.add('has-draft'); }
+    });
+    document.addEventListener('keydown', e => {
+        if (!e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || !items.length) return;
+        e.preventDefault();
+        const cur = items.findIndex(a => a.classList.contains('active'));
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        const next = cur < 0 ? (step > 0 ? 0 : items.length - 1) : (cur + step + items.length) % items.length;
+        window.location.href = items[next].href;
+    });
+})();
+</script>
